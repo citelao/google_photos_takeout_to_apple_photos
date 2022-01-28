@@ -59,6 +59,8 @@ const albums = albumFolders.map((d) => {
     return {
         title: title,
         dir: d,
+        content: images_and_movies,
+        items: jsons,
     }
 });
 
