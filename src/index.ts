@@ -23,10 +23,43 @@ google_photos_dirs.filter((d) => {
 
 console.log("Reading from:", google_photos_dirs);
 
-const albums = google_photos_dirs.map((d) => {
+const albumFolders = google_photos_dirs.map((d) => {
     const files = fs.readdirSync(d, { withFileTypes: true });
     const dirs = files.filter((f)=> f.isDirectory());
     const full_dirs = dirs.map((f) => path.join(d, f.name));
     return full_dirs;
 }).flat();
-console.log(albums);
+
+const albums = albumFolders.map((d) => {
+    const title = path.basename(d);
+
+    const items = fs.readdirSync(d, { withFileTypes: true });
+    const KNOWN_TYPES = [
+        ".GIF", 
+        ".HEIC",
+        ".JPG",
+        ".JPEG", 
+        ".MOV",
+        ".MP4", 
+        ".PNG", 
+    ];
+    const images_and_movies = items.filter((i) => {
+        return i.isFile() && KNOWN_TYPES.includes(path.extname(i.name).toUpperCase());
+    });
+
+    const jsons = items.filter((i) => {
+        return i.isFile() && path.extname(i.name) === ".json";
+    });
+    
+    const remaining = items.filter((i) => !images_and_movies.includes(i) && !jsons.includes(i));
+    if (remaining.length !== 0) {
+        console.warn(`Unrecognized objects: ${remaining.map(r => r.name)}`);
+    }
+
+    return {
+        title: title,
+        dir: d,
+    }
+});
+
+console.log(albumFolders, albums);
