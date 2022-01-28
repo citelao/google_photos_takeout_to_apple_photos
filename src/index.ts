@@ -8,7 +8,12 @@ function toFixed(n: number | string, digits: number): number {
     if (typeof n === "string") {
         n = Number.parseFloat(n);
     }
-    return (n * Math.pow(10, digits)) / Math.pow(10, digits);
+    return Math.round((n + Number.EPSILON) * Math.pow(10, digits)) / Math.pow(10, digits);
+}
+
+function distance(a: { lat: number; lon: number; }, b: { lat: number; lon: number; }): number {
+    // console.log(a, b);
+    return Math.sqrt(Math.pow(a.lat - b.lat, 2) + Math.pow(a.lon - b.lon, 2));
 }
 
 async function execAsync(cmd: string): Promise<{ stdout: string; stderr: string; }> {
@@ -254,14 +259,25 @@ async function main() {
                 const hasGeoData = exif.Composite.GPSLatitude && exif.Composite.GPSLongitude;
                 if (hasMetadataGeoData || hasMetadataGeoDataExif) {
                     if (hasGeoData) {
-                        const geoDataMatch =
-                            toFixed(json.metadata.geoData.latitude, 3) === toFixed(exif.Composite.GPSLatitude!, 3) &&
-                            toFixed(json.metadata.geoData.longitude, 3) === toFixed(exif.Composite.GPSLongitude!, 3);
-                        const geoDataExifMatch =
-                            toFixed(json.metadata.geoDataExif.latitude, 3) === toFixed(exif.Composite.GPSLatitude!, 3) &&
-                            toFixed(json.metadata.geoDataExif.longitude, 3) === toFixed(exif.Composite.GPSLongitude!, 3);
+                        const GPS_PRECISION = Math.pow(10, -4);
+                        const latLon = {
+                            lat: Number.parseFloat(exif.Composite.GPSLatitude!.toString()),
+                            lon: Number.parseFloat(exif.Composite.GPSLongitude!.toString())
+                        };
+                        const geoDataDist =
+                            distance({
+                                lat: json.metadata.geoData.latitude,
+                                lon: json.metadata.geoData.longitude
+                            }, latLon);
+                        const geoDataMatch = geoDataDist < GPS_PRECISION;
+                        const geoDataExifDist =
+                            distance({
+                                lat: json.metadata.geoDataExif.latitude,
+                                lon: json.metadata.geoDataExif.longitude
+                            }, latLon);
+                        const geoDataExifMatch = geoDataExifDist < GPS_PRECISION;
                         if (!geoDataMatch || !geoDataExifMatch) {
-                            console.warn(`Geodata mismatch: ${title} - ${quickImageName} (${json.metadata.geoData.latitude}, ${json.metadata.geoData.longitude} => ${exif.Composite.GPSLatitude}, ${exif.Composite.GPSLongitude})`);
+                            console.warn(`Geodata mismatch: ${title} - ${quickImageName} (${json.metadata.geoDataExif.latitude}, ${json.metadata.geoDataExif.longitude} [${geoDataDist}] & ${json.metadata.geoData.latitude}, ${json.metadata.geoData.longitude} [${geoDataExifDist}] => ${latLon.lat}, ${latLon.lon})`);
                         }
                     } else {
                         console.warn(`No EXIF location data, but location metadata for ${title} - ${quickImageName}`);
@@ -326,7 +342,7 @@ async function main() {
             dirs: a.dirs,
             metadata: metadata,
             content: all_images_and_jsons,
-            items: parsedJsons,
+            manifests: parsedJsons,
         }
     }));
     
@@ -344,12 +360,13 @@ async function main() {
         if (a.metadata) {
             console.log("\t(has metadata)")
         }
-        console.log(`\tTotal items: ${a.items.length}`);
+        console.log(`\tManifests: ${a.manifests.length}`);
+        const livePhotoCount = a.content.filter((c) => c.image?.livePhotoId).length;
         const noManifest = a.content.filter((c) => !c.manifest).length;
         if (noManifest) {
-            console.log(`\tActual images: ${a.content.length} (no manifest: ${noManifest})`);
+            console.log(`\tActual images: ${a.content.length} (${livePhotoCount} are live) (no manifest: ${noManifest})`);
         } else {
-            console.log(`\tActual images: ${a.content.length}`);
+            console.log(`\tActual images: ${a.content.length} (${livePhotoCount} are live)`);
         }
         console.log();
     })
