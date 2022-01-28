@@ -9,7 +9,7 @@ interface Timestamp {
 interface GeoData {
     latitude: number;
     longitude: number;
-    altitutde: number;
+    altitude: number;
     latitudeSpan: number;
     longitudeSpan: number;
 }
@@ -110,13 +110,13 @@ async function main() {
 
         let metadata: MetadataJson | null = null;
         const metadataJsonIndex = jsons.findIndex(i => path.basename(i) === "metadata.json");
-        if (metadataJsonIndex !== -1) {
-            const metadataJson = jsons.splice(metadataJsonIndex, 1);
-            metadata = parseMetadataJson(metadataJson[0]);
+        const metadataJson = (metadataJsonIndex === -1) ? null : jsons.splice(metadataJsonIndex, 1)[0];
+        if (metadataJson) {
+            metadata = parseMetadataJson(metadataJson);
         }
         const title = metadata?.title || a.name;
         
-        const remaining = items.filter((i) => !images_and_movies.includes(i) && !jsons.includes(i));
+        const remaining = items.filter((i) => !images_and_movies.includes(i) && !jsons.includes(i) && (!metadataJson || i !== metadataJson));
         if (remaining.length !== 0) {
             console.warn(`Unrecognized objects: ${remaining.map(r => r)}`);
         }
@@ -131,9 +131,10 @@ async function main() {
         // Ensure we have JSONs for each image/movie:
         const matched_image_and_json = await Promise.all(images_and_movies.map(async (i) => {
             const json = parsedJsons.find((j) => path.parse(j.path).name === path.basename(i));
+            const quickImageName = path.basename(i);
             
             if (!json) {
-                console.warn(`No matching JSON for ${title} - ${i}`);
+                console.warn(`No matching JSON for ${title} - ${quickImageName}`);
             }
 
             let gps = null;
@@ -141,6 +142,13 @@ async function main() {
                 gps = await exifr.gps(i);
             } catch(e) {
                 gps = `(gps parse failed: ${e})`
+            }
+
+            const hasMetadataGeoData = json?.metadata.geoData.latitude && json?.metadata.geoData.longitude;
+            const hasMetadataGeoDataExif = json?.metadata.geoDataExif.latitude && json?.metadata.geoDataExif.longitude;
+            const hasGeoData = gps && typeof gps !== "string";
+            if ((hasMetadataGeoData || hasMetadataGeoDataExif) && !hasGeoData) {
+                console.warn(`No EXIF location data, but location metadata for ${title} - ${quickImageName}`);
             }
 
             return {
@@ -161,7 +169,7 @@ async function main() {
         }
     }));
     
-    console.log(JSON.stringify(albums, null, 2));
+    // console.log(JSON.stringify(albums, null, 2));
 
     console.log();
     
