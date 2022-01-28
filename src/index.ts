@@ -96,12 +96,12 @@ albums.forEach((a) => {
         const trim = p.substring(0, gphotosIndex);
         return path.basename(trim);
     }).join(", ")}`);
-    console.log(`Total items: ${a.items.length}`);
+    console.log(`\tTotal items: ${a.items.length}`);
     const noManifest = a.content.filter((c) => !c.manifest).length;
     if (noManifest) {
-        console.log(`Actual images: ${a.content.length} (no manifest: ${noManifest})`);
+        console.log(`\tActual images: ${a.content.length} (no manifest: ${noManifest})`);
     } else {
-        console.log(`Actual images: ${a.content.length}`);
+        console.log(`\tActual images: ${a.content.length}`);
     }
     console.log();
 })
