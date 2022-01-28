@@ -28,12 +28,24 @@ const albumFolders = google_photos_dirs.map((d) => {
     const dirs = files.filter((f)=> f.isDirectory());
     const full_dirs = dirs.map((f) => path.join(d, f.name));
     return full_dirs;
-}).flat();
+}).flat().reduce<{ name: string; dirs: string[]; }[]>((acc, cur) => {
+    const album_title = path.basename(cur);
+    const existing = acc.find((v) => v.name === album_title);
+    if (existing) {
+        existing.dirs.push(cur);
+    } else {
+        acc.push({
+            name: album_title,
+            dirs: [cur],
+        });
+    }
+    return acc;
+}, []);
 
-const albums = albumFolders.map((d) => {
-    const title = path.basename(d);
+const albums = albumFolders.map((a) => {
+    const title = a.name;
 
-    const items = fs.readdirSync(d, { withFileTypes: true });
+    const items = a.dirs.map((d) => fs.readdirSync(d).map(f => path.join(d, f)) ).flat();
     const KNOWN_TYPES = [
         ".GIF", 
         ".HEIC",
@@ -44,23 +56,24 @@ const albums = albumFolders.map((d) => {
         ".PNG", 
     ];
     const images_and_movies = items.filter((i) => {
-        return i.isFile() && KNOWN_TYPES.includes(path.extname(i.name).toUpperCase());
+        return KNOWN_TYPES.includes(path.extname(i).toUpperCase());
     });
 
     const jsons = items.filter((i) => {
-        return i.isFile() && path.extname(i.name) === ".json";
+        return path.extname(i) === ".json";
     });
     
     const remaining = items.filter((i) => !images_and_movies.includes(i) && !jsons.includes(i));
     if (remaining.length !== 0) {
-        console.warn(`Unrecognized objects: ${remaining.map(r => r.name)}`);
+        console.warn(`Unrecognized objects: ${remaining.map(r => r)}`);
     }
 
     // Ensure we have JSONs for each image/movie:
     const matched_image_and_json = images_and_movies.map((i) => {
-        const json = jsons.find((j) => path.basename(j.name) === i.name);
+        const json = jsons.find((j) => path.parse(j).name === path.basename(i));
+        
         if (!json) {
-            console.warn(`No matching JSON for ${title} - ${i.name}`);
+            console.warn(`No matching JSON for ${title} - ${i}`);
         }
 
         return [i, json];
@@ -68,10 +81,10 @@ const albums = albumFolders.map((d) => {
 
     return {
         title: title,
-        dir: d,
+        dirs: a.dirs,
         content: matched_image_and_json,
         items: jsons,
     }
 });
 
-console.dir(albums);
+// console.dir(albums.map(a => a.items));
