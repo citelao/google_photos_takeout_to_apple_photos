@@ -76,7 +76,7 @@ const albums = albumFolders.map((a) => {
             console.warn(`No matching JSON for ${title} - ${i}`);
         }
 
-        return [i, json];
+        return { image: i, manifest: json };
     });
 
     return {
@@ -87,4 +87,21 @@ const albums = albumFolders.map((a) => {
     }
 });
 
-// console.dir(albums.map(a => a.items));
+console.log();
+
+albums.forEach((a) => {
+    console.log(a.title);
+    console.log(`\tin: ${a.dirs.map((p) => {
+        const gphotosIndex = p.indexOf("Google Photos");
+        const trim = p.substring(0, gphotosIndex);
+        return path.basename(trim);
+    }).join(", ")}`);
+    console.log(`Total items: ${a.items.length}`);
+    const noManifest = a.content.filter((c) => !c.manifest).length;
+    if (noManifest) {
+        console.log(`Actual images: ${a.content.length} (no manifest: ${noManifest})`);
+    } else {
+        console.log(`Actual images: ${a.content.length}`);
+    }
+    console.log();
+})
