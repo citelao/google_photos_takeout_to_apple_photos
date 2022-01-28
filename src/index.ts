@@ -56,12 +56,22 @@ const albums = albumFolders.map((d) => {
         console.warn(`Unrecognized objects: ${remaining.map(r => r.name)}`);
     }
 
+    // Ensure we have JSONs for each image/movie:
+    const matched_image_and_json = images_and_movies.map((i) => {
+        const json = jsons.find((j) => path.basename(j.name) === i.name);
+        if (!json) {
+            console.warn(`No matching JSON for ${title} - ${i.name}`);
+        }
+
+        return [i, json];
+    });
+
     return {
         title: title,
         dir: d,
-        content: images_and_movies,
+        content: matched_image_and_json,
         items: jsons,
     }
 });
 
-console.log(albumFolders, albums);
+console.dir(albums);
