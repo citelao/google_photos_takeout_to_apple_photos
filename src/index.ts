@@ -27,14 +27,14 @@ interface ExifToolOutput {
     // ...many other things...
     MakerNotes: {
         ContentIdentifier: string | undefined;
-    } | {} | undefined,
+    } | undefined,
     Composite: {
         GPSLatitude: string | number | undefined;
         GPSLongitude: string | number | undefined;
     }
 }
 async function getExifToolData(path: string): Promise<ExifToolOutput> {
-    const PRECISION = 2;
+    const PRECISION = 6;
     const result = await execAsync(`exiftool -g -json -c "%+.${PRECISION}f" "${path}"`);
     const json = JSON.parse(result.stdout)[0];
     // console.log(json);
@@ -44,8 +44,23 @@ async function getExifToolData(path: string): Promise<ExifToolOutput> {
 async function getExifToolDataForDirectory(dirPath: string): Promise<[ExifToolOutput]> {
     const PRECISION = 6;
     const result = await execAsync(`exiftool -g -json -c "%+.${PRECISION}f" "${dirPath}"`);
-    const lines = result.stdout.split("\n");
-    const json = JSON.parse(lines.join("\n"));
+    const json = JSON.parse(result.stdout);
+    return json;
+}
+
+interface FfprobeOutput {
+    // ...many other things...
+    format: {
+        filename: string;
+        tags: {
+            "com.apple.quicktime.content.identifier": string | undefined;
+        }
+    }
+}
+async function getFfprobeData(path: string): Promise<FfprobeOutput> {
+    const result = await execAsync(`ffprobe -print_format json -v quiet -hide_banner -show_format "${path}"`);
+    // console.log(result.stdout);
+    const json = JSON.parse(result.stdout);
     return json;
 }
 
@@ -155,14 +170,20 @@ async function main() {
     
     const albums = await Promise.all(albumFolders.map(async (a) => {    
         const items = a.dirs.map((d) => fs.readdirSync(d).map(f => path.join(d, f)) ).flat();
-        const KNOWN_TYPES = [
+        const VIDEO_TYPES = [
+            ".MOV",
+            ".MP4", 
+        ];
+        const IMAGE_TYPES = [
             ".GIF", 
             ".HEIC",
             ".JPG",
             ".JPEG", 
-            ".MOV",
-            ".MP4", 
             ".PNG", 
+        ];
+        const KNOWN_TYPES = [
+            ... VIDEO_TYPES,
+            ... IMAGE_TYPES,
         ];
         const images_and_movies = items.filter((i) => {
             return KNOWN_TYPES.includes(path.extname(i).toUpperCase());
@@ -195,7 +216,22 @@ async function main() {
         const exifs = (await Promise.all(a.dirs.map(async (d) => await getExifToolDataForDirectory(d)))).flat();
 
         // Ensure we have JSONs for each image/movie:
-        const matched_image_and_json = await Promise.all(images_and_movies.map(async (i) => {
+        type ContentInfo = {
+            video?: {
+                metadata: FfprobeOutput;
+                livePhotoId?: string;
+            };
+            image?: {
+                metadata: ExifToolOutput;
+                livePhotoId?: string;
+            }
+            path: string;
+            manifest?: {
+                path: string;
+                metadata: ImageMetadataJson;
+            }
+        };
+        const matched_image_and_json = await Promise.all(images_and_movies.map(async (i): Promise<ContentInfo> => {
             const json = parsedJsons.find((j) => path.parse(j.path).name === path.basename(i));
             const quickImageName = path.basename(i);
             
@@ -203,46 +239,91 @@ async function main() {
                 console.warn(`No matching JSON for ${title} - ${quickImageName}`);
             }
 
-            const metadata = exifs.find((e) => e.SourceFile === i);
+            const isVideo = VIDEO_TYPES.includes(path.extname(i));
+            const metadata = (isVideo) ? await getFfprobeData(i) : exifs.find((e) => e.SourceFile === i);
             if (!metadata) {
                 throw new Error(`No metadata for ${title} - ${quickImageName}`);
             }
 
-            const hasMetadataGeoData = json?.metadata.geoData.latitude && json?.metadata.geoData.longitude;
-            const hasMetadataGeoDataExif = json?.metadata.geoDataExif.latitude && json?.metadata.geoDataExif.longitude;
-            const hasGeoData = metadata.Composite.GPSLatitude && metadata.Composite.GPSLongitude;
-            if (hasMetadataGeoData || hasMetadataGeoDataExif) {
-                if (hasGeoData) {
-                    const geoDataMatch =
-                        toFixed(json.metadata.geoData.latitude, 3) === toFixed(metadata.Composite.GPSLatitude!, 3) &&
-                        toFixed(json.metadata.geoData.longitude, 3) === toFixed(metadata.Composite.GPSLongitude!, 3);
-                    const geoDataExifMatch =
-                        toFixed(json.metadata.geoDataExif.latitude, 3) === toFixed(metadata.Composite.GPSLatitude!, 3) &&
-                        toFixed(json.metadata.geoDataExif.longitude, 3) === toFixed(metadata.Composite.GPSLongitude!, 3);
-                    if (!geoDataMatch || !geoDataExifMatch) {
-                        console.warn(`Geodata mismatch: ${title} - ${quickImageName} (${json.metadata.geoData.latitude}, ${json.metadata.geoData.longitude} => ${metadata.Composite.GPSLatitude}, ${metadata.Composite.GPSLongitude})`);
+            // Match GPS data
+            if (!isVideo)
+            {
+                const exif = metadata as ExifToolOutput;
+                const hasMetadataGeoData = json?.metadata.geoData.latitude && json?.metadata.geoData.longitude;
+                const hasMetadataGeoDataExif = json?.metadata.geoDataExif.latitude && json?.metadata.geoDataExif.longitude;
+                const hasGeoData = exif.Composite.GPSLatitude && exif.Composite.GPSLongitude;
+                if (hasMetadataGeoData || hasMetadataGeoDataExif) {
+                    if (hasGeoData) {
+                        const geoDataMatch =
+                            toFixed(json.metadata.geoData.latitude, 3) === toFixed(exif.Composite.GPSLatitude!, 3) &&
+                            toFixed(json.metadata.geoData.longitude, 3) === toFixed(exif.Composite.GPSLongitude!, 3);
+                        const geoDataExifMatch =
+                            toFixed(json.metadata.geoDataExif.latitude, 3) === toFixed(exif.Composite.GPSLatitude!, 3) &&
+                            toFixed(json.metadata.geoDataExif.longitude, 3) === toFixed(exif.Composite.GPSLongitude!, 3);
+                        if (!geoDataMatch || !geoDataExifMatch) {
+                            console.warn(`Geodata mismatch: ${title} - ${quickImageName} (${json.metadata.geoData.latitude}, ${json.metadata.geoData.longitude} => ${exif.Composite.GPSLatitude}, ${exif.Composite.GPSLongitude})`);
+                        }
+                    } else {
+                        console.warn(`No EXIF location data, but location metadata for ${title} - ${quickImageName}`);
                     }
-                } else {
-                console.warn(`No EXIF location data, but location metadata for ${title} - ${quickImageName}`);
+                } else if (hasGeoData) {
+                    console.warn(`Has EXIF data but no location metadata ${title} - ${quickImageName}`);
                 }
-            } else if (hasGeoData) {
-                console.warn(`Has EXIF data but no location metadata ${title} - ${quickImageName}`);
             }
 
-            return {
-                image: {
-                    metadata: metadata,
-                    dir: i,
-                },
-                manifest: json
-            };
+            const livePhotoId = (isVideo)
+                ? (metadata as FfprobeOutput).format.tags["com.apple.quicktime.content.identifier"]
+                : (metadata as ExifToolOutput).MakerNotes?.ContentIdentifier;
+            if (isVideo) {
+                return {
+                    video: {
+                        metadata: metadata as FfprobeOutput,
+                        livePhotoId: livePhotoId
+                    },
+                    path: i,
+                    manifest: json
+                };
+            } else {
+                return {
+                    image: {
+                        metadata: metadata as ExifToolOutput,
+                        livePhotoId: livePhotoId
+                    },
+                    path: i,
+                    manifest: json
+                };
+            }
         }));
+
+        // Pair live photos
+        const all_images_and_jsons = matched_image_and_json.reduce<ContentInfo[]>((acc, cur) => {
+            const livePhotoId = (cur.image) ? cur.image.livePhotoId : cur.video?.livePhotoId;
+            if (livePhotoId) {
+                const existingIndex = acc.findIndex((c) => {
+                    if (c.image) {
+                        return c.image.livePhotoId === livePhotoId;
+                    } else {
+                        return c.video!.livePhotoId === livePhotoId;
+                    }
+                });
+                if (existingIndex !== -1) {
+                    if (cur.image) {
+                        acc[existingIndex].image = cur.image;
+                    } else {
+                        acc[existingIndex].video = cur.video;
+                    }
+                }
+            } else {
+                acc.push(cur);
+            }
+            return acc;
+        }, []);
     
         return {
             title: title,
             dirs: a.dirs,
             metadata: metadata,
-            content: matched_image_and_json,
+            content: all_images_and_jsons,
             items: parsedJsons,
         }
     }));
