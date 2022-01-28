@@ -4,6 +4,9 @@
   "main": "index.js",
   "license": "MIT",
   "private": true,
+  "scripts": {
+    "go": "ts-node src/index.ts"
+  },
   "devDependencies": {
     "ts-node": "^10.4.0",
     "typescript": "^4.5.5"
