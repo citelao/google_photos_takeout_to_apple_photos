@@ -11,25 +11,41 @@ function toFixed(n: number | string, digits: number): number {
     return (n * Math.pow(10, digits)) / Math.pow(10, digits);
 }
 
+async function execAsync(cmd: string): Promise<{ stdout: string; stderr: string; }> {
+    const result: { stdout: string, stderr: string } = await exec(cmd);
+
+    // TODO: handle errors?
+    // if (result.stderr) {
+    //     throw new Error(`exiftool failed: ${result.stderr}`);
+    // }
+
+    return result;
+}
+
 interface ExifToolOutput {
+    SourceFile: string;
     // ...many other things...
     MakerNotes: {
         ContentIdentifier: string | undefined;
     } | {} | undefined,
     Composite: {
-        GPSLatitude: string | undefined;
-        GPSLongitude: string | undefined;
+        GPSLatitude: string | number | undefined;
+        GPSLongitude: string | number | undefined;
     }
 }
 async function getExifToolData(path: string): Promise<ExifToolOutput> {
-    const result: { stdout: string, stderr: string } = await exec(`exiftool -g -json -c "%.6f" "${path}"`);
-
-    if (result.stderr) {
-        throw new Error(`exiftool failed: ${result.stderr}`);
-    }
-
+    const PRECISION = 2;
+    const result = await execAsync(`exiftool -g -json -c "%+.${PRECISION}f" "${path}"`);
     const json = JSON.parse(result.stdout)[0];
     // console.log(json);
+    return json;
+}
+
+async function getExifToolDataForDirectory(dirPath: string): Promise<[ExifToolOutput]> {
+    const PRECISION = 6;
+    const result = await execAsync(`exiftool -g -json -c "%+.${PRECISION}f" "${dirPath}"`);
+    const lines = result.stdout.split("\n");
+    const json = JSON.parse(lines.join("\n"));
     return json;
 }
 
@@ -169,13 +185,15 @@ async function main() {
             console.warn(`Unrecognized objects: ${remaining.map(r => r)}`);
         }
 
-        const parsedJsons = jsons.map((path) => {
+        const parsedJsons = jsons.map((p) => {
             return {
-                path: path,
-                metadata: parseImageMetadataJson(path),
+                path: p,
+                metadata: parseImageMetadataJson(p),
             }
         });
     
+        const exifs = (await Promise.all(a.dirs.map(async (d) => await getExifToolDataForDirectory(d)))).flat();
+
         // Ensure we have JSONs for each image/movie:
         const matched_image_and_json = await Promise.all(images_and_movies.map(async (i) => {
             const json = parsedJsons.find((j) => path.parse(j.path).name === path.basename(i));
@@ -185,14 +203,16 @@ async function main() {
                 console.warn(`No matching JSON for ${title} - ${quickImageName}`);
             }
 
-            const metadata = await getExifToolData(i);
+            const metadata = exifs.find((e) => e.SourceFile === i);
+            if (!metadata) {
+                throw new Error(`No metadata for ${title} - ${quickImageName}`);
+            }
 
             const hasMetadataGeoData = json?.metadata.geoData.latitude && json?.metadata.geoData.longitude;
             const hasMetadataGeoDataExif = json?.metadata.geoDataExif.latitude && json?.metadata.geoDataExif.longitude;
             const hasGeoData = metadata.Composite.GPSLatitude && metadata.Composite.GPSLongitude;
             if (hasMetadataGeoData || hasMetadataGeoDataExif) {
                 if (hasGeoData) {
-                    const GPS_ACCURACY_DIGITS = 3;
                     const geoDataMatch =
                         toFixed(json.metadata.geoData.latitude, 3) === toFixed(metadata.Composite.GPSLatitude!, 3) &&
                         toFixed(json.metadata.geoData.longitude, 3) === toFixed(metadata.Composite.GPSLongitude!, 3);
