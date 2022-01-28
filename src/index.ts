@@ -140,15 +140,40 @@ async function main() {
             let gps = null;
             try {
                 gps = await exifr.gps(i);
+                // const foo = await exifr.parse(i, {
+                //     gps: true,
+                //     pick: ["MakerNote"]
+                // });
+                // console.log(new TextDecoder().decode((foo.makerNote as Uint8Array).slice(0, 300)));
+                // console.log()
+                // console.log(await parseBplistAsync(Buffer.from(foo.makerNote as Uint8Array)));
+                // process.exit(0);
             } catch(e) {
-                gps = `(gps parse failed: ${e})`
+                gps = {
+                    error: `(gps parse failed: ${e})`
+                }
             }
 
             const hasMetadataGeoData = json?.metadata.geoData.latitude && json?.metadata.geoData.longitude;
             const hasMetadataGeoDataExif = json?.metadata.geoDataExif.latitude && json?.metadata.geoDataExif.longitude;
-            const hasGeoData = gps && typeof gps !== "string";
-            if ((hasMetadataGeoData || hasMetadataGeoDataExif) && !hasGeoData) {
+            const hasGeoData = gps && !Object.keys(gps).includes("error");
+            if (hasMetadataGeoData || hasMetadataGeoDataExif) {
+                if (hasGeoData) {
+                    const GPS_ACCURACY_DIGITS = 3;
+                    const geoDataMatch =
+                        toFixed(json.metadata.geoData.latitude, 3) === toFixed(gps.latitude!, 3) &&
+                        toFixed(json.metadata.geoData.longitude, 3) === toFixed(gps.longitude!, 3);
+                    const geoDataExifMatch =
+                        toFixed(json.metadata.geoDataExif.latitude, 3) === toFixed(gps.latitude!, 3) &&
+                        toFixed(json.metadata.geoDataExif.longitude, 3) === toFixed(gps.longitude!, 3);
+                    if (!geoDataMatch || !geoDataExifMatch) {
+                        console.warn(`Geodata mismatch: ${title} - ${quickImageName} (${json.metadata.geoData.latitude}, ${json.metadata.geoData.longitude} => ${gps.latitude}, ${gps.longitude})`);
+                    }
+                } else {
                 console.warn(`No EXIF location data, but location metadata for ${title} - ${quickImageName}`);
+                }
+            } else if (hasGeoData) {
+                console.warn(`Has EXIF data but no location metadata ${title} - ${quickImageName}`);
             }
 
             return {
