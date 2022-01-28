@@ -5,6 +5,9 @@
 ## Usage 
 
 ```
+# Requires exiftool:
+brew install exiftool
+
 npm install
 npm run go -- path/to/takeout
 ```
