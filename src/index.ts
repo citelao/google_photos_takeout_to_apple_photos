@@ -312,6 +312,8 @@ async function main() {
                     } else {
                         acc[existingIndex].video = cur.video;
                     }
+                } else {
+                    acc.push(cur);
                 }
             } else {
                 acc.push(cur);
