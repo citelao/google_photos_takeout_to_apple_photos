@@ -1,107 +1,159 @@
 import fs from "fs";
 import path from "path";
+import exifr from "exifr";
 
-if (process.argv.length != 3) {
-    console.error(`Wrong number of arguments; try 'npm run go -- path/here/'\r\n\r\n(${process.argv})`);
-    process.exit(1);
+interface MetadataJson {
+    title: string;
+    description: string;
+    access: string;
+    date: {
+        timestamp: string;
+        formatted: string;
+    },
+    location: string;
+    geoData: {
+        latitude: number;
+        longitude: number;
+        altitutde: number;
+        latitudeSpan: number;
+        longitudeSpan: number;
+    }
+}
+function parseMetadataJson(metadataJsonPath: string): MetadataJson {
+    const json = JSON.parse(fs.readFileSync(metadataJsonPath).toString('utf-8'));
+    return json as MetadataJson;
 }
 
-const takeout_dir = process.argv[2];
-const files = fs.readdirSync(takeout_dir, { withFileTypes: true });
-
-// TODO: handle someone giving the "Google Photos" directory or a directory containing Google Photos directly.
-const dirs = files.filter((f)=> f.isDirectory());
-const google_photos_dirs = dirs.map((f) => path.join(takeout_dir, f.name, "Google Photos"));
-
-google_photos_dirs.filter((d) => {
-    const doesExist = fs.existsSync(d);
-    if (!doesExist) {
-        console.warn(`Ignoring ${d} (doesn't exist).`);
+async function main() {
+    if (process.argv.length != 3) {
+        console.error(`Wrong number of arguments; try 'npm run go -- path/here/'\r\n\r\n(${process.argv})`);
+        process.exit(1);
     }
-    return doesExist;
-});
-
-console.log("Reading from:", google_photos_dirs);
-
-const albumFolders = google_photos_dirs.map((d) => {
-    const files = fs.readdirSync(d, { withFileTypes: true });
+    
+    const takeout_dir = process.argv[2];
+    const files = fs.readdirSync(takeout_dir, { withFileTypes: true });
+    
+    // TODO: handle someone giving the "Google Photos" directory or a directory containing Google Photos directly.
     const dirs = files.filter((f)=> f.isDirectory());
-    const full_dirs = dirs.map((f) => path.join(d, f.name));
-    return full_dirs;
-}).flat().reduce<{ name: string; dirs: string[]; }[]>((acc, cur) => {
-    const album_title = path.basename(cur);
-    const existing = acc.find((v) => v.name === album_title);
-    if (existing) {
-        existing.dirs.push(cur);
-    } else {
-        acc.push({
-            name: album_title,
-            dirs: [cur],
-        });
-    }
-    return acc;
-}, []);
-
-const albums = albumFolders.map((a) => {
-    const title = a.name;
-
-    const items = a.dirs.map((d) => fs.readdirSync(d).map(f => path.join(d, f)) ).flat();
-    const KNOWN_TYPES = [
-        ".GIF", 
-        ".HEIC",
-        ".JPG",
-        ".JPEG", 
-        ".MOV",
-        ".MP4", 
-        ".PNG", 
-    ];
-    const images_and_movies = items.filter((i) => {
-        return KNOWN_TYPES.includes(path.extname(i).toUpperCase());
-    });
-
-    const jsons = items.filter((i) => {
-        return path.extname(i) === ".json";
+    const google_photos_dirs = dirs.map((f) => path.join(takeout_dir, f.name, "Google Photos"));
+    
+    google_photos_dirs.filter((d) => {
+        const doesExist = fs.existsSync(d);
+        if (!doesExist) {
+            console.warn(`Ignoring ${d} (doesn't exist).`);
+        }
+        return doesExist;
     });
     
-    const remaining = items.filter((i) => !images_and_movies.includes(i) && !jsons.includes(i));
-    if (remaining.length !== 0) {
-        console.warn(`Unrecognized objects: ${remaining.map(r => r)}`);
-    }
-
-    // Ensure we have JSONs for each image/movie:
-    const matched_image_and_json = images_and_movies.map((i) => {
-        const json = jsons.find((j) => path.parse(j).name === path.basename(i));
-        
-        if (!json) {
-            console.warn(`No matching JSON for ${title} - ${i}`);
+    console.log("Reading from:", google_photos_dirs);
+    
+    const albumFolders = google_photos_dirs.map((d) => {
+        const files = fs.readdirSync(d, { withFileTypes: true });
+        const dirs = files.filter((f)=> f.isDirectory());
+        const full_dirs = dirs.map((f) => path.join(d, f.name));
+        return full_dirs;
+    }).flat().reduce<{ name: string; dirs: string[]; }[]>((acc, cur) => {
+        const album_title = path.basename(cur);
+        const existing = acc.find((v) => v.name === album_title);
+        if (existing) {
+            existing.dirs.push(cur);
+        } else {
+            acc.push({
+                name: album_title,
+                dirs: [cur],
+            });
         }
+        return acc;
+    }, []);
+    
+    const albums = await Promise.all(albumFolders.map(async (a) => {    
+        const items = a.dirs.map((d) => fs.readdirSync(d).map(f => path.join(d, f)) ).flat();
+        const KNOWN_TYPES = [
+            ".GIF", 
+            ".HEIC",
+            ".JPG",
+            ".JPEG", 
+            ".MOV",
+            ".MP4", 
+            ".PNG", 
+        ];
+        const images_and_movies = items.filter((i) => {
+            return KNOWN_TYPES.includes(path.extname(i).toUpperCase());
+        });
+    
+        const jsons = items.filter((i) => {
+            return path.extname(i) === ".json";
+        });
 
-        return { image: i, manifest: json };
-    });
+        let metadata: MetadataJson | null = null;
+        const metadataJsonIndex = jsons.findIndex(i => path.basename(i) === "metadata.json");
+        if (metadataJsonIndex !== -1) {
+            const metadataJson = jsons.splice(metadataJsonIndex, 1);
+            metadata = parseMetadataJson(metadataJson[0]);
+        }
+        const title = metadata?.title || a.name;
+        
+        const remaining = items.filter((i) => !images_and_movies.includes(i) && !jsons.includes(i));
+        if (remaining.length !== 0) {
+            console.warn(`Unrecognized objects: ${remaining.map(r => r)}`);
+        }
+    
+        // Ensure we have JSONs for each image/movie:
+        const matched_image_and_json = await Promise.all(images_and_movies.map(async (i) => {
+            const json = jsons.find((j) => path.parse(j).name === path.basename(i));
+            
+            if (!json) {
+                console.warn(`No matching JSON for ${title} - ${i}`);
+            }
 
-    return {
-        title: title,
-        dirs: a.dirs,
-        content: matched_image_and_json,
-        items: jsons,
-    }
-});
+            let gps = null;
+            try {
+                gps = await exifr.gps(i);
+            } catch(e) {
+                gps = `(gps parse failed: ${e})`
+            }
 
-console.log();
+            return {
+                image: {
+                    gps: gps,
+                    dir: i,
+                },
+                manifest: json
+            };
+        }));
+    
+        return {
+            title: title,
+            dirs: a.dirs,
+            metadata: metadata,
+            content: matched_image_and_json,
+            items: jsons,
+        }
+    }));
+    
+    console.log(JSON.stringify(albums, null, 2));
 
-albums.forEach((a) => {
-    console.log(a.title);
-    console.log(`\tin: ${a.dirs.map((p) => {
-        const gphotosIndex = p.indexOf("Google Photos");
-        const trim = p.substring(0, gphotosIndex);
-        return path.basename(trim);
-    }).join(", ")}`);
-    console.log(`\tTotal items: ${a.items.length}`);
-    const noManifest = a.content.filter((c) => !c.manifest).length;
-    if (noManifest) {
-        console.log(`\tActual images: ${a.content.length} (no manifest: ${noManifest})`);
-    } else {
-        console.log(`\tActual images: ${a.content.length}`);
-    }
     console.log();
-})
+    
+    albums.forEach((a) => {
+        console.log(a.title);
+        console.log(`\tin: ${a.dirs.map((p) => {
+            const gphotosIndex = p.indexOf("Google Photos");
+            const trim = p.substring(0, gphotosIndex);
+            return path.basename(trim);
+        }).join(", ")}`);
+        if (a.metadata) {
+            console.log("\t(has metadata)")
+        }
+        console.log(`\tTotal items: ${a.items.length}`);
+        const noManifest = a.content.filter((c) => !c.manifest).length;
+        if (noManifest) {
+            console.log(`\tActual images: ${a.content.length} (no manifest: ${noManifest})`);
+        } else {
+            console.log(`\tActual images: ${a.content.length}`);
+        }
+        console.log();
+    })
+}
+
+main();
