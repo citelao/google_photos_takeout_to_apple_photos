@@ -2,26 +2,49 @@ import fs from "fs";
 import path from "path";
 import exifr from "exifr";
 
+interface Timestamp {
+    timestamp: string;
+    formatted: string;
+}
+interface GeoData {
+    latitude: number;
+    longitude: number;
+    altitutde: number;
+    latitudeSpan: number;
+    longitudeSpan: number;
+}
 interface MetadataJson {
     title: string;
     description: string;
     access: string;
-    date: {
-        timestamp: string;
-        formatted: string;
-    },
+    date: Timestamp,
     location: string;
-    geoData: {
-        latitude: number;
-        longitude: number;
-        altitutde: number;
-        latitudeSpan: number;
-        longitudeSpan: number;
-    }
+    geoData: GeoData;
 }
 function parseMetadataJson(metadataJsonPath: string): MetadataJson {
     const json = JSON.parse(fs.readFileSync(metadataJsonPath).toString('utf-8'));
     return json as MetadataJson;
+}
+
+interface ImageMetadataJson {
+    title: string;
+    description: string;
+    imageViews: string;
+    creationTime: Timestamp;
+    photoTakenTime: Timestamp;
+    geoData: GeoData;
+    geoDataExif: GeoData;
+    url: string;
+    googlePhotosOrigin: {
+        mobileUpload: {
+            deviceType: "IOS_PHONE" | string;
+        }
+    } | unknown;
+    photoLastModifiedTime: Timestamp;
+}
+function parseImageMetadataJson(jsonPath: string): ImageMetadataJson {
+    const json = JSON.parse(fs.readFileSync(jsonPath).toString('utf-8'));
+    return json as ImageMetadataJson;
 }
 
 async function main() {
@@ -97,10 +120,17 @@ async function main() {
         if (remaining.length !== 0) {
             console.warn(`Unrecognized objects: ${remaining.map(r => r)}`);
         }
+
+        const parsedJsons = jsons.map((path) => {
+            return {
+                path: path,
+                metadata: parseImageMetadataJson(path),
+            }
+        });
     
         // Ensure we have JSONs for each image/movie:
         const matched_image_and_json = await Promise.all(images_and_movies.map(async (i) => {
-            const json = jsons.find((j) => path.parse(j).name === path.basename(i));
+            const json = parsedJsons.find((j) => path.parse(j.path).name === path.basename(i));
             
             if (!json) {
                 console.warn(`No matching JSON for ${title} - ${i}`);
@@ -127,7 +157,7 @@ async function main() {
             dirs: a.dirs,
             metadata: metadata,
             content: matched_image_and_json,
-            items: jsons,
+            items: parsedJsons,
         }
     }));
     
