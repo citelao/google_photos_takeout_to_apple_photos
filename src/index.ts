@@ -268,18 +268,17 @@ async function main() {
                     return exactMatch;
                 }
 
-                // TODO: I think this is wrong! I think I just have two files.
-                //
                 // Names like
                 // 58535142263__8767EB8A-D857-4A0E-9C1F-17EAFC8DB4EC.JPG seem to
                 // occassionally be truncated:
                 // 58535142263__8767EB8A-D857-4A0E-9C1F-17EAFC8DB4, for example.
-
-                // if (baseName.indexOf("__") !== -1) {
-                //     const noExt = path.parse(itemPath).name;
-                //     const smallMatch = parsedJsons.find((j) => j.metadata.title.indexOf(noExt) !== -1);
-                //     return smallMatch;
-                // }
+                if (baseName.indexOf("__") !== -1) {
+                    const noExt = path.parse(itemPath).name;
+                    const ext = path.parse(itemPath).ext;
+                    const smallMatch = parsedJsons.find((j) => j.metadata.title.indexOf(noExt) !== -1 && path.extname(j.metadata.title) === ext);
+                    // console.log(noExt, ext, !!smallMatch);
+                    return smallMatch;
+                }
 
                 return null;
             };
@@ -405,20 +404,28 @@ async function main() {
     const all_images = albums.map(a => a.content).flat();
     console.log(`Total images & videos: ${all_images.length}`);
 
+    const noManifest = all_images.filter((c) => !c.manifest);
+    console.log(`No manifest: ${noManifest.length}`);
+
     const noLocation = all_images.filter(i => i.image && !i.image.metadata.Composite.GPSLatitude);
     console.log(`Images with no location info: ${noLocation.length}`);
 
     // Unpaired Live Photos cause problems?
     const unpairedLivePhotos = all_images.filter(i => (!i.image != !i.video) && (i.image?.livePhotoId || i.video?.livePhotoId));
     console.log(`Unpaired live photos: ${unpairedLivePhotos.length}`);
-
     unpairedLivePhotos.forEach((p) => {
         console.log(p.path);
     });
+    console.log();
 
-    // Names like `57129642196__B027A842-8129-4128-8354-E415D2100BB3.JPG` seem to confuse Photos.
-    const badlyNamed = all_images.filter(i => i.path.indexOf("__") !== -1);
-    console.log(`Confusingly named: ${unpairedLivePhotos.length}`);
+    // Names like `57129642196__B027A842-8129-4128-8354-E415D2100BB3.JPG` seem
+    // to confuse Photos.
+    const misNamed = all_images.filter(i => i.manifest && path.parse(i.path).base !== i.manifest.metadata.title);
+    console.log(`Manifest/name mismatch: ${misNamed.length}`);
+    misNamed.forEach((p) => {
+        console.log(p.path, /* path.parse(p.path).base, */ p.manifest?.metadata.title);
+    });
+    console.log();
 
     // Debug
     // fs.writeFileSync("output.json", JSON.stringify(albums, undefined, 4));
