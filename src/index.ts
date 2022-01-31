@@ -261,10 +261,33 @@ async function main() {
                     }
                 }) : -1;
 
+            const getMatchingManifest = () => {
+                const baseName = path.basename(itemPath);
+                const exactMatch = parsedJsons.find((j) => path.parse(j.path).name === baseName);
+                if (exactMatch) {
+                    return exactMatch;
+                }
+
+                // TODO: I think this is wrong! I think I just have two files.
+                //
+                // Names like
+                // 58535142263__8767EB8A-D857-4A0E-9C1F-17EAFC8DB4EC.JPG seem to
+                // occassionally be truncated:
+                // 58535142263__8767EB8A-D857-4A0E-9C1F-17EAFC8DB4, for example.
+
+                // if (baseName.indexOf("__") !== -1) {
+                //     const noExt = path.parse(itemPath).name;
+                //     const smallMatch = parsedJsons.find((j) => j.metadata.title.indexOf(noExt) !== -1);
+                //     return smallMatch;
+                // }
+
+                return null;
+            };
+
             if (existingIndex !== -1) {
                 // Add the info.
 
-                const extraJson = parsedJsons.find((j) => path.parse(j.path).name === path.basename(itemPath));
+                const extraJson = getMatchingManifest();
                 if (parsed_images[existingIndex].manifest) {
                     if (extraJson) {
                         console.warn(`Redundant JSON found for ${title} - ${quickImageName}`);
@@ -328,7 +351,7 @@ async function main() {
                 }
             } else {
                 // Create a new one. Grab metadata.
-                const json = parsedJsons.find((j) => path.parse(j.path).name === path.basename(itemPath));
+                const json = getMatchingManifest()!;
 
                 parsed_images.push({
                     path: itemPath,
@@ -382,21 +405,24 @@ async function main() {
     const all_images = albums.map(a => a.content).flat();
     console.log(`Total images & videos: ${all_images.length}`);
 
-    const noLocation = albums.map(a => a.content).flat().filter(i => i.image && !i.image.metadata.Composite.GPSLatitude);
+    const noLocation = all_images.filter(i => i.image && !i.image.metadata.Composite.GPSLatitude);
     console.log(`Images with no location info: ${noLocation.length}`);
 
-    const unpairedLivePhotos = albums.map(a => a.content).flat().filter(i => (!i.image != !i.video) && (i.image?.livePhotoId || i.video?.livePhotoId));
+    // Unpaired Live Photos cause problems?
+    const unpairedLivePhotos = all_images.filter(i => (!i.image != !i.video) && (i.image?.livePhotoId || i.video?.livePhotoId));
     console.log(`Unpaired live photos: ${unpairedLivePhotos.length}`);
 
     unpairedLivePhotos.forEach((p) => {
         console.log(p.path);
     });
 
+    // Names like `57129642196__B027A842-8129-4128-8354-E415D2100BB3.JPG` seem to confuse Photos.
+    const badlyNamed = all_images.filter(i => i.path.indexOf("__") !== -1);
+    console.log(`Confusingly named: ${unpairedLivePhotos.length}`);
+
     // Debug
     // fs.writeFileSync("output.json", JSON.stringify(albums, undefined, 4));
 
-    // Names like `57129642196__B027A842-8129-4128-8354-E415D2100BB3.JPG` seem to confuse Photos.
-    // Unpaired Live Photos also (?)
 
     // const inspect = albums.slice(0, 3);
     // const inspect = albums.map(a => a.content).flat().filter(i => (!i.image != !i.video) && (i.image?.livePhotoId || i.video?.livePhotoId));
