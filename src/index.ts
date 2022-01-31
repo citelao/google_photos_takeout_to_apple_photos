@@ -37,11 +37,17 @@ interface ExifToolOutput {
     Composite: {
         GPSLatitude: string | number | undefined;
         GPSLongitude: string | number | undefined;
+
+        // File creation
+        SubSecCreateDate: number | undefined;
+
+        // Image taken
+        SubSecDateTimeOriginal: number | undefined;
     }
 }
 async function getExifToolData(path: string): Promise<ExifToolOutput> {
     const PRECISION = 6;
-    const result = await execAsync(`exiftool -g -json -c "%+.${PRECISION}f" "${path}"`);
+    const result = await execAsync(`exiftool -g -json -d "%s" -c "%+.${PRECISION}f" "${path}"`);
     const json = JSON.parse(result.stdout)[0];
     // console.log(json);
     return json;
@@ -49,7 +55,7 @@ async function getExifToolData(path: string): Promise<ExifToolOutput> {
 
 async function getExifToolDataForDirectory(dirPath: string): Promise<[ExifToolOutput]> {
     const PRECISION = 6;
-    const result = await execAsync(`exiftool -g -json -c "%+.${PRECISION}f" "${dirPath}"`);
+    const result = await execAsync(`exiftool -g -json -d "%s" -c "%+.${PRECISION}f" "${dirPath}"`);
     const json = JSON.parse(result.stdout);
     return json;
 }
@@ -132,7 +138,7 @@ function parseImageMetadataJson(jsonPath: string): ImageMetadataJson {
     return json as ImageMetadataJson;
 }
 
-function findPhotoInPhotos(image_filename: string, image_timestamp: string, image_size: number): string {
+function findPhotoInPhotos(image_filename: string, image_timestamp: number, image_size: number): string | null {
     // Derived from https://github.com/akhudek/google-photos-to-apple-photos/blob/main/migrate-albums.py
     const FIND_PHOTO_SCRIPT = `
         on unixDate(datetime)
@@ -145,6 +151,7 @@ function findPhotoInPhotos(image_filename: string, image_timestamp: string, imag
         on run {image_filename, image_timestamp, image_size}
             tell application "Photos"
                 set images to search for image_filename
+
                 repeat with img in images
                     set myFilename to filename of img
                     set myTimestamp to my unixDate(get date of img)
@@ -159,21 +166,13 @@ function findPhotoInPhotos(image_filename: string, image_timestamp: string, imag
             return ""
         end run
     `;
-    const result = child_process.spawnSync("osascript", ["-", image_filename, image_timestamp, image_size], { input: FIND_PHOTO_SCRIPT});
+    const result = child_process.spawnSync("osascript", ["-", image_filename, image_timestamp.toString(), image_size.toString()], { input: FIND_PHOTO_SCRIPT});
     const output = result.stdout.toString("utf-8");
     if (result.stderr.length != 0) {
         throw new Error(result.stderr.toString("utf-8"));
     }
-    return output;
+    return output.trim() || null;
 }
-
-const filePath = "/Users/citelao/Desktop/fake/58539247452__D1ADFFD9-BC78-4508-A663-C03D13B04AFC.JPG";
-const id = findPhotoInPhotos(
-    path.basename(filePath),
-    "1563699674",
-    fs.statSync(filePath).size);
-console.log(id);
-// process.exit(0);
 
 async function main() {
     if (process.argv.length != 3) {
@@ -274,6 +273,7 @@ async function main() {
                 metadata: ExifToolOutput;
                 livePhotoId?: string;
             }
+            photosId: string | null;
             path: string;
             manifest?: {
                 path: string;
@@ -327,6 +327,23 @@ async function main() {
 
                 return null;
             };
+
+            // If this is an image
+            let photosId = null;
+            if (!isVideo) {
+                const size = fs.statSync(itemPath).size;
+                const creationTime = (metadata as ExifToolOutput).Composite.SubSecDateTimeOriginal || 0;
+                photosId = findPhotoInPhotos(
+                    path.basename(itemPath),
+                    creationTime,
+                    size);
+                
+                if (!photosId) {
+                    console.log("Not found in Photos: ", itemPath, size, creationTime);
+                } else {
+                    console.log(`"${photosId}"`)
+                }
+            }
 
             if (existingIndex !== -1) {
                 // Add the info.
@@ -400,6 +417,7 @@ async function main() {
                 parsed_images.push({
                     path: itemPath,
                     manifest: json,
+                    photosId: photosId,
                     image: (isVideo) ? undefined : {
                         livePhotoId: livePhotoId,
                         metadata: metadata as ExifToolOutput,
@@ -483,4 +501,4 @@ async function main() {
     // console.log(inspect.length);
 }
 
-// main();
+main();
