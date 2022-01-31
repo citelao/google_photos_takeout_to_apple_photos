@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import exifr from "exifr";
 import util from "util";
+import child_process from "child_process";
 const exec = util.promisify(require('child_process').exec);
 
 function toFixed(n: number | string, digits: number): number {
@@ -130,6 +131,49 @@ function parseImageMetadataJson(jsonPath: string): ImageMetadataJson {
     const json = JSON.parse(fs.readFileSync(jsonPath).toString('utf-8'));
     return json as ImageMetadataJson;
 }
+
+function findPhotoInPhotos(image_path: string, image_filename: string, image_timestamp: string, image_size: string): string {
+    const FIND_PHOTO_SCRIPT = `
+        on unixDate(datetime)
+            set command to "date -j -f '%A, %B %e, %Y at %I:%M:%S %p' '" & datetime & "'"
+            set command to command & " +%s"
+            
+            set theUnixDate to do shell script command
+            return theUnixDate
+        end unixDate
+        on run {image_path, image_filename, image_timestamp, image_size}
+            tell application "Photos"
+                set images to search for image_filename
+                repeat with img in images
+                    set myFilename to filename of img
+                    set myTimestamp to my unixDate(get date of img)
+                    set mySize to size of img                
+                    if image_filename is equal to myFilename and mySize is equal to (image_size as integer)
+                        if image_timestamp is equal to "" or image_timestamp is equal to myTimestamp
+                            return (get id of img)
+                        end if
+                    end if
+                end repeat
+            end tell
+            return ""
+        end run
+    `;
+    const result = child_process.spawnSync("osascript", ["-", image_path, image_filename, image_timestamp, image_size], { input: FIND_PHOTO_SCRIPT});
+
+    console.log(result.stdout.toString("utf-8"));
+    if (result.stderr.length != 0) {
+        throw new Error(result.stderr.toString("utf-8"));
+    }
+    return "";
+}
+
+const filePath = "/Users/citelao/Desktop/fake/58539247452__D1ADFFD9-BC78-4508-A663-C03D13B04AFC.JPG";
+findPhotoInPhotos(
+    filePath,
+    path.basename(filePath),
+    "1563699674",
+    fs.statSync(filePath).size + "");
+// process.exit(0);
 
 async function main() {
     if (process.argv.length != 3) {
@@ -439,4 +483,4 @@ async function main() {
     // console.log(inspect.length);
 }
 
-main();
+// main();
