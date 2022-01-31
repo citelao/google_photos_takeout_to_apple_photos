@@ -272,7 +272,8 @@ async function main() {
                 // 58535142263__8767EB8A-D857-4A0E-9C1F-17EAFC8DB4EC.JPG seem to
                 // occassionally be truncated:
                 // 58535142263__8767EB8A-D857-4A0E-9C1F-17EAFC8DB4, for example.
-                if (baseName.indexOf("__") !== -1) {
+                if (baseName.length === 51) {
+                    // console.log(baseName, baseName.length);
                     const noExt = path.parse(itemPath).name;
                     const ext = path.parse(itemPath).ext;
                     const smallMatch = parsedJsons.find((j) => j.metadata.title.indexOf(noExt) !== -1 && path.extname(j.metadata.title) === ext);
@@ -418,9 +419,10 @@ async function main() {
     });
     console.log();
 
-    // Names like `57129642196__B027A842-8129-4128-8354-E415D2100BB3.JPG` seem
-    // to confuse Photos.
-    const misNamed = all_images.filter(i => i.manifest && path.parse(i.path).base !== i.manifest.metadata.title);
+    // Long names (>51 chars) like
+    // `57129642196__B027A842-8129-4128-8354-E415D2100BB3.JPG` seem to confuse
+    // Photos. We'll have detected them earlier, just log them here.
+    const misNamed = all_images.filter(i => i.manifest && path.parse(i.path).name !== path.parse(i.manifest.metadata.title).name);
     console.log(`Manifest/name mismatch: ${misNamed.length}`);
     misNamed.forEach((p) => {
         console.log(p.path, /* path.parse(p.path).base, */ p.manifest?.metadata.title);
@@ -428,8 +430,7 @@ async function main() {
     console.log();
 
     // Debug
-    // fs.writeFileSync("output.json", JSON.stringify(albums, undefined, 4));
-
+    fs.writeFileSync("output.json", JSON.stringify(albums, undefined, 4));
 
     // const inspect = albums.slice(0, 3);
     // const inspect = albums.map(a => a.content).flat().filter(i => (!i.image != !i.video) && (i.image?.livePhotoId || i.video?.livePhotoId));
