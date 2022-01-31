@@ -443,33 +443,18 @@ async function main() {
 
     // Now, find IDs for all the photos in Photos!
     albums.forEach((a) => {
-        const images_to_find = a.content.filter(i => i.image).map((i) => {
+        const images_to_find = a.content.map((i) => {
             return {
                 image_filename: i.manifest?.metadata.title || path.basename(i.path),
-                image_timestamp: i.image?.metadata.Composite.SubSecDateTimeOriginal || 0,
+                image_timestamp: i.image?.metadata.Composite.SubSecDateTimeOriginal || 0, // TODO: date time for video?
                 image_size: fs.statSync(i.path).size,
             };
         });
         const ids = findPhotoInPhotos(images_to_find);
         console.log(ids);
-        // let photosId = null;
-        // if (!isVideo) {
-        //     const size = fs.statSync(itemPath).size;
-        //     const creationTime = (metadata as ExifToolOutput).Composite.SubSecDateTimeOriginal || 0;
-        //     photosId = findPhotoInPhotos(
-        //         json?.metadata.title || path.basename(itemPath),
-        //         creationTime,
-        //         size);
-            
-        //     if (!photosId) {
-        //         console.log("Not found in Photos: ", itemPath, size, creationTime);
-        //     }
-        //     // else {
-        //     //     console.log(`"${photosId}"`)
-        //     // }
-        // }
-        // // TODO: PHOTOs ID FOR VIDEOS!!!!
-
+        for (let i = 0; i < ids.length; i++) {
+            a.content[i].photosId = ids[i];
+        }
     });
 
     console.log();
