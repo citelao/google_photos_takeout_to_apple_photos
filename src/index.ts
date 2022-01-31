@@ -141,6 +141,7 @@ function parseImageMetadataJson(jsonPath: string): ImageMetadataJson {
 function findPhotoInPhotos(images: {image_filename: string, image_timestamp: number | string, image_size: number}[]): (string | null)[] {
     // Derived from https://github.com/akhudek/google-photos-to-apple-photos/blob/main/migrate-albums.py
     const DIVIDER = "✂";
+    const TIMESTAMP_TOLERANCE = "1";
     const FIND_PHOTO_SCRIPT = `
         on unixDate(datetime)
             set command to "date -j -f '%A, %B %e, %Y at %I:%M:%S %p' '" & datetime & "'"
@@ -170,7 +171,7 @@ function findPhotoInPhotos(images: {image_filename: string, image_timestamp: num
                             set abs_time_diff to time_diff
                         end if
 
-                        if abs_time_diff = 0 then
+                        if abs_time_diff <= ${TIMESTAMP_TOLERANCE} then
                             return (get id of img)
                         end if
                     end if
