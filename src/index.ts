@@ -138,7 +138,7 @@ function parseImageMetadataJson(jsonPath: string): ImageMetadataJson {
     return json as ImageMetadataJson;
 }
 
-function findPhotoInPhotos(image_filename: string, image_timestamp: number, image_size: number): string | null {
+function findPhotoInPhotos(images: {image_filename: string, image_timestamp: number, image_size: number}[]): string | null {
     // Derived from https://github.com/akhudek/google-photos-to-apple-photos/blob/main/migrate-albums.py
     const FIND_PHOTO_SCRIPT = `
         on unixDate(datetime)
@@ -169,20 +169,21 @@ function findPhotoInPhotos(image_filename: string, image_timestamp: number, imag
         end tryGetImage
 
         on run argv
-            set result to ""
+            set output to ""
             set currentIndex to 1
             repeat while currentIndex <= length of argv
                 set image_filename to item currentIndex of argv
                 set image_timestamp to item (currentIndex + 1) of argv 
                 set image_size to item (currentIndex + 2) of argv
-                set result to result & "✂" & (my tryGetImage(image_filename, image_timestamp, image_size))
+                set output to output & (my tryGetImage(image_filename, image_timestamp, image_size)) & "✂"
                 set currentIndex to currentIndex + 3
             end repeat
 
-            return ""
+            return output
         end run
     `;
-    const result = child_process.spawnSync("osascript", ["-", image_filename, image_timestamp.toString(), image_size.toString()], { input: FIND_PHOTO_SCRIPT});
+    const flatArgs = images.map((i) => [i.image_filename, i.image_timestamp.toString(), i.image_size.toString()]).flat();
+    const result = child_process.spawnSync("osascript", ["-", ... flatArgs], { input: FIND_PHOTO_SCRIPT});
     const output = result.stdout.toString("utf-8");
     if (result.stderr.length != 0) {
         throw new Error(result.stderr.toString("utf-8"));
@@ -190,7 +191,18 @@ function findPhotoInPhotos(image_filename: string, image_timestamp: number, imag
     return output.trim() || null;
 }
 
-console.log(findPhotoInPhotos("IMG_3488.HEIC", 1568826284, 923836));
+console.log(findPhotoInPhotos([
+    { image_filename: "IMG_3488.HEIC", image_timestamp: 1568826284, image_size: 923836 },
+    { image_filename: "IMG_3488.HEIC", image_timestamp: 1568826284, image_size: 923836 },
+    { image_filename: "IMG_3488.HEIC", image_timestamp: 1568826284, image_size: 923836 },
+    { image_filename: "IMG_3488.HEIC", image_timestamp: 1568826284, image_size: 923836 },
+    { image_filename: "IMG_3488.HEIC", image_timestamp: 1568826284, image_size: 923836 },
+    { image_filename: "IMG_3488.HEIC", image_timestamp: 1568826284, image_size: 923836 },
+    { image_filename: "IMG_3488.HEIC", image_timestamp: 1568826284, image_size: 923836 },
+    { image_filename: "IMG_3488.HEIC", image_timestamp: 1568826284, image_size: 923836 },
+    { image_filename: "IMG_3488.HEIC", image_timestamp: 1568826284, image_size: 923836 },
+    { image_filename: "IMG_3488.HEIC", image_timestamp: 1568826284, image_size: 923836 },
+]));
 
 async function main() {
     if (process.argv.length != 3) {
