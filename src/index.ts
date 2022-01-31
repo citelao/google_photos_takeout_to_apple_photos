@@ -194,19 +194,6 @@ function findPhotoInPhotos(images: {image_filename: string, image_timestamp: num
     return ids.map((i) => i.trim() || null);
 }
 
-console.log(findPhotoInPhotos([
-    { image_filename: "IMG_3488.HEIC", image_timestamp: 1568826284, image_size: 923836 },
-    { image_filename: "IMG_348f8.HEIC", image_timestamp: 1568826284, image_size: 923836 },
-    { image_filename: "IMG_3488.HEIC", image_timestamp: 1568826284, image_size: 923836 },
-    { image_filename: "IMG_3488.HEIC", image_timestamp: 1568826284, image_size: 923836 },
-    { image_filename: "IMG_3488.HEIC", image_timestamp: 1568826284, image_size: 923836 },
-    { image_filename: "IMG_3488.HEIC", image_timestamp: 1568826284, image_size: 923836 },
-    { image_filename: "IMG_3488.HEIC", image_timestamp: 1568826284, image_size: 923836 },
-    { image_filename: "IMG_3488.HEIC", image_timestamp: 1568826284, image_size: 923836 },
-    { image_filename: "IMG_3488.HEIC", image_timestamp: 1568826284, image_size: 923836 },
-    { image_filename: "IMG_3488.HEIC", image_timestamp: 1568826284, image_size: 923836 },
-]));
-
 async function main() {
     if (process.argv.length != 3) {
         console.error(`Wrong number of arguments; try 'npm run go -- path/here/'\r\n\r\n(${process.argv})`);
@@ -456,7 +443,15 @@ async function main() {
 
     // Now, find IDs for all the photos in Photos!
     albums.forEach((a) => {
-        
+        const images_to_find = a.content.filter(i => i.image).map((i) => {
+            return {
+                image_filename: i.manifest?.metadata.title || path.basename(i.path),
+                image_timestamp: i.image?.metadata.Composite.SubSecDateTimeOriginal || 0,
+                image_size: fs.statSync(i.path).size,
+            };
+        });
+        const ids = findPhotoInPhotos(images_to_find);
+        console.log(ids);
         // let photosId = null;
         // if (!isVideo) {
         //     const size = fs.statSync(itemPath).size;
@@ -537,4 +532,4 @@ async function main() {
     // console.log(inspect.length);
 }
 
-// main();
+main();
