@@ -328,23 +328,6 @@ async function main() {
                 return null;
             };
 
-            // If this is an image
-            let photosId = null;
-            if (!isVideo) {
-                const size = fs.statSync(itemPath).size;
-                const creationTime = (metadata as ExifToolOutput).Composite.SubSecDateTimeOriginal || 0;
-                photosId = findPhotoInPhotos(
-                    path.basename(itemPath),
-                    creationTime,
-                    size);
-                
-                if (!photosId) {
-                    console.log("Not found in Photos: ", itemPath, size, creationTime);
-                } else {
-                    console.log(`"${photosId}"`)
-                }
-            }
-
             if (existingIndex !== -1) {
                 // Add the info.
 
@@ -413,6 +396,24 @@ async function main() {
             } else {
                 // Create a new one. Grab metadata.
                 const json = getMatchingManifest()!;
+
+                let photosId = null;
+                if (!isVideo) {
+                    const size = fs.statSync(itemPath).size;
+                    const creationTime = (metadata as ExifToolOutput).Composite.SubSecDateTimeOriginal || 0;
+                    photosId = findPhotoInPhotos(
+                        json?.metadata.title || path.basename(itemPath),
+                        creationTime,
+                        size);
+                    
+                    if (!photosId) {
+                        console.log("Not found in Photos: ", itemPath, size, creationTime);
+                    }
+                    // else {
+                    //     console.log(`"${photosId}"`)
+                    // }
+                }
+                // TODO: PHOTOs ID FOR VIDEOS!!!!
 
                 parsed_images.push({
                     path: itemPath,
