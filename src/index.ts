@@ -138,7 +138,7 @@ function parseImageMetadataJson(jsonPath: string): ImageMetadataJson {
     return json as ImageMetadataJson;
 }
 
-function findPhotoInPhotos(images: {image_filename: string, image_timestamp: number, image_size: number}[]): (string | null)[] {
+function findPhotoInPhotos(images: {image_filename: string, image_timestamp: number | string, image_size: number}[]): (string | null)[] {
     // Derived from https://github.com/akhudek/google-photos-to-apple-photos/blob/main/migrate-albums.py
     const DIVIDER = "✂";
     const FIND_PHOTO_SCRIPT = `
@@ -159,7 +159,18 @@ function findPhotoInPhotos(images: {image_filename: string, image_timestamp: num
                     set myTimestamp to my unixDate(get date of img)
                     set mySize to size of img                
                     if image_filename is equal to myFilename and mySize is equal to (image_size as integer)
-                        if image_timestamp is equal to "" or image_timestamp is equal to myTimestamp
+                        if image_timestamp is equal to ""
+                            return (get id of img)
+                        end if
+
+                        set time_diff to image_timestamp - myTimestamp
+                        if time_diff < 0 then
+                            set abs_time_diff to -time_diff
+                        else
+                            set abs_time_diff to time_diff
+                        end if
+
+                        if abs_time_diff <= 1 then
                             return (get id of img)
                         end if
                     end if
@@ -446,7 +457,7 @@ async function main() {
         const images_to_find = a.content.map((i) => {
             return {
                 image_filename: i.manifest?.metadata.title || path.basename(i.path),
-                image_timestamp: i.image?.metadata.Composite.SubSecDateTimeOriginal || 0, // TODO: date time for video?
+                image_timestamp: i.image?.metadata.Composite.SubSecDateTimeOriginal || "", // TODO: date time for video?
                 image_size: fs.statSync(i.path).size,
             };
         });
