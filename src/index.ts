@@ -392,6 +392,12 @@ async function main() {
         console.log(p.path);
     });
 
+    // Debug
+    // fs.writeFileSync("output.json", JSON.stringify(albums, undefined, 4));
+
+    // Names like `57129642196__B027A842-8129-4128-8354-E415D2100BB3.JPG` seem to confuse Photos.
+    // Unpaired Live Photos also (?)
+
     // const inspect = albums.slice(0, 3);
     // const inspect = albums.map(a => a.content).flat().filter(i => (!i.image != !i.video) && (i.image?.livePhotoId || i.video?.livePhotoId));
     // const inspect = albums.map(a => a.content).flat().filter(i => i.image && !i.image.metadata.Composite.GPSLatitude);
