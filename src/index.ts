@@ -148,7 +148,8 @@ function findPhotoInPhotos(image_filename: string, image_timestamp: number, imag
             set theUnixDate to do shell script command
             return theUnixDate
         end unixDate
-        on run {image_filename, image_timestamp, image_size}
+
+        on tryGetImage(image_filename, image_timestamp, image_size)
             tell application "Photos"
                 set images to search for image_filename
 
@@ -162,7 +163,22 @@ function findPhotoInPhotos(image_filename: string, image_timestamp: number, imag
                         end if
                     end if
                 end repeat
+
+                return ""
             end tell
+        end tryGetImage
+
+        on run argv
+            set result to ""
+            set currentIndex to 1
+            repeat while currentIndex <= length of argv
+                set image_filename to item currentIndex of argv
+                set image_timestamp to item (currentIndex + 1) of argv 
+                set image_size to item (currentIndex + 2) of argv
+                set result to result & "✂" & (my tryGetImage(image_filename, image_timestamp, image_size))
+                set currentIndex to currentIndex + 3
+            end repeat
+
             return ""
         end run
     `;
@@ -173,6 +189,8 @@ function findPhotoInPhotos(image_filename: string, image_timestamp: number, imag
     }
     return output.trim() || null;
 }
+
+console.log(findPhotoInPhotos("IMG_3488.HEIC", 1568826284, 923836));
 
 async function main() {
     if (process.argv.length != 3) {
@@ -273,7 +291,7 @@ async function main() {
                 metadata: ExifToolOutput;
                 livePhotoId?: string;
             }
-            photosId: string | null;
+            photosId?: string | null;
             path: string;
             manifest?: {
                 path: string;
@@ -397,28 +415,9 @@ async function main() {
                 // Create a new one. Grab metadata.
                 const json = getMatchingManifest()!;
 
-                let photosId = null;
-                if (!isVideo) {
-                    const size = fs.statSync(itemPath).size;
-                    const creationTime = (metadata as ExifToolOutput).Composite.SubSecDateTimeOriginal || 0;
-                    photosId = findPhotoInPhotos(
-                        json?.metadata.title || path.basename(itemPath),
-                        creationTime,
-                        size);
-                    
-                    if (!photosId) {
-                        console.log("Not found in Photos: ", itemPath, size, creationTime);
-                    }
-                    // else {
-                    //     console.log(`"${photosId}"`)
-                    // }
-                }
-                // TODO: PHOTOs ID FOR VIDEOS!!!!
-
                 parsed_images.push({
                     path: itemPath,
                     manifest: json,
-                    photosId: photosId,
                     image: (isVideo) ? undefined : {
                         livePhotoId: livePhotoId,
                         metadata: metadata as ExifToolOutput,
@@ -439,8 +438,29 @@ async function main() {
             manifests: parsedJsons,
         }
     }));
-    
-    // console.log(JSON.stringify(albums, null, 2));
+
+    // Now, find IDs for all the photos in Photos!
+    albums.forEach((a) => {
+        
+        // let photosId = null;
+        // if (!isVideo) {
+        //     const size = fs.statSync(itemPath).size;
+        //     const creationTime = (metadata as ExifToolOutput).Composite.SubSecDateTimeOriginal || 0;
+        //     photosId = findPhotoInPhotos(
+        //         json?.metadata.title || path.basename(itemPath),
+        //         creationTime,
+        //         size);
+            
+        //     if (!photosId) {
+        //         console.log("Not found in Photos: ", itemPath, size, creationTime);
+        //     }
+        //     // else {
+        //     //     console.log(`"${photosId}"`)
+        //     // }
+        // }
+        // // TODO: PHOTOs ID FOR VIDEOS!!!!
+
+    });
 
     console.log();
     
@@ -502,4 +522,4 @@ async function main() {
     // console.log(inspect.length);
 }
 
-main();
+// main();
