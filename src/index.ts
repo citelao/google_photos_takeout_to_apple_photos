@@ -138,8 +138,9 @@ function parseImageMetadataJson(jsonPath: string): ImageMetadataJson {
     return json as ImageMetadataJson;
 }
 
-function findPhotoInPhotos(images: {image_filename: string, image_timestamp: number, image_size: number}[]): string | null {
+function findPhotoInPhotos(images: {image_filename: string, image_timestamp: number, image_size: number}[]): (string | null)[] {
     // Derived from https://github.com/akhudek/google-photos-to-apple-photos/blob/main/migrate-albums.py
+    const DIVIDER = "✂";
     const FIND_PHOTO_SCRIPT = `
         on unixDate(datetime)
             set command to "date -j -f '%A, %B %e, %Y at %I:%M:%S %p' '" & datetime & "'"
@@ -175,7 +176,7 @@ function findPhotoInPhotos(images: {image_filename: string, image_timestamp: num
                 set image_filename to item currentIndex of argv
                 set image_timestamp to item (currentIndex + 1) of argv 
                 set image_size to item (currentIndex + 2) of argv
-                set output to output & (my tryGetImage(image_filename, image_timestamp, image_size)) & "✂"
+                set output to output & (my tryGetImage(image_filename, image_timestamp, image_size)) & "${DIVIDER}"
                 set currentIndex to currentIndex + 3
             end repeat
 
@@ -188,12 +189,14 @@ function findPhotoInPhotos(images: {image_filename: string, image_timestamp: num
     if (result.stderr.length != 0) {
         throw new Error(result.stderr.toString("utf-8"));
     }
-    return output.trim() || null;
+    const ids = output.split(DIVIDER);
+    ids.pop(); // The last one is always that extra scissor.
+    return ids.map((i) => i.trim() || null);
 }
 
 console.log(findPhotoInPhotos([
     { image_filename: "IMG_3488.HEIC", image_timestamp: 1568826284, image_size: 923836 },
-    { image_filename: "IMG_3488.HEIC", image_timestamp: 1568826284, image_size: 923836 },
+    { image_filename: "IMG_348f8.HEIC", image_timestamp: 1568826284, image_size: 923836 },
     { image_filename: "IMG_3488.HEIC", image_timestamp: 1568826284, image_size: 923836 },
     { image_filename: "IMG_3488.HEIC", image_timestamp: 1568826284, image_size: 923836 },
     { image_filename: "IMG_3488.HEIC", image_timestamp: 1568826284, image_size: 923836 },
