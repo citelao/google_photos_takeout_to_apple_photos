@@ -379,9 +379,14 @@ async function main() {
         console.log();
     });
 
+    const all_images = albums.map(a => a.content).flat();
+    console.log(`Total images & videos: ${all_images.length}`);
+
     // const inspect = albums.slice(0, 3);
     // const inspect = albums.map(a => a.content).flat().filter(i => (!i.image != !i.video) && (i.image?.livePhotoId || i.video?.livePhotoId));
+    // const inspect = albums.map(a => a.content).flat().filter(i => i.image && !i.image.metadata.Composite.GPSLatitude);
     // console.dir(inspect, { depth: 5})
+    // console.log(inspect.length);
 }
 
 main();
