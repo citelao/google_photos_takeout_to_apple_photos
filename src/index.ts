@@ -170,7 +170,7 @@ function findPhotoInPhotos(images: {image_filename: string, image_timestamp: num
                             set abs_time_diff to time_diff
                         end if
 
-                        if abs_time_diff <= 1 then
+                        if abs_time_diff = 0 then
                             return (get id of img)
                         end if
                     end if
@@ -493,6 +493,9 @@ async function main() {
 
     const all_images = albums.map(a => a.content).flat();
     console.log(`Total images & videos: ${all_images.length}`);
+
+    const notImported = all_images.filter((c) => !c.photosId);
+    console.log(`Not imported: ${notImported.length}`);
 
     const noManifest = all_images.filter((c) => !c.manifest);
     console.log(`No manifest: ${noManifest.length}`);
