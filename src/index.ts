@@ -132,7 +132,8 @@ function parseImageMetadataJson(jsonPath: string): ImageMetadataJson {
     return json as ImageMetadataJson;
 }
 
-function findPhotoInPhotos(image_path: string, image_filename: string, image_timestamp: string, image_size: string): string {
+function findPhotoInPhotos(image_filename: string, image_timestamp: string, image_size: number): string {
+    // Derived from https://github.com/akhudek/google-photos-to-apple-photos/blob/main/migrate-albums.py
     const FIND_PHOTO_SCRIPT = `
         on unixDate(datetime)
             set command to "date -j -f '%A, %B %e, %Y at %I:%M:%S %p' '" & datetime & "'"
@@ -141,7 +142,7 @@ function findPhotoInPhotos(image_path: string, image_filename: string, image_tim
             set theUnixDate to do shell script command
             return theUnixDate
         end unixDate
-        on run {image_path, image_filename, image_timestamp, image_size}
+        on run {image_filename, image_timestamp, image_size}
             tell application "Photos"
                 set images to search for image_filename
                 repeat with img in images
@@ -158,21 +159,20 @@ function findPhotoInPhotos(image_path: string, image_filename: string, image_tim
             return ""
         end run
     `;
-    const result = child_process.spawnSync("osascript", ["-", image_path, image_filename, image_timestamp, image_size], { input: FIND_PHOTO_SCRIPT});
-
-    console.log(result.stdout.toString("utf-8"));
+    const result = child_process.spawnSync("osascript", ["-", image_filename, image_timestamp, image_size], { input: FIND_PHOTO_SCRIPT});
+    const output = result.stdout.toString("utf-8");
     if (result.stderr.length != 0) {
         throw new Error(result.stderr.toString("utf-8"));
     }
-    return "";
+    return output;
 }
 
 const filePath = "/Users/citelao/Desktop/fake/58539247452__D1ADFFD9-BC78-4508-A663-C03D13B04AFC.JPG";
-findPhotoInPhotos(
-    filePath,
+const id = findPhotoInPhotos(
     path.basename(filePath),
     "1563699674",
-    fs.statSync(filePath).size + "");
+    fs.statSync(filePath).size);
+console.log(id);
 // process.exit(0);
 
 async function main() {
