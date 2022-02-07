@@ -8,7 +8,7 @@ import { getPhotosAlbums, findPhotoInPhotos, findOrCreateAlbum, addPhotosToAlbum
 
 
 
-
+const DO_ACTIONS = false;
 const WHAT_IF = true;
 
 
@@ -383,6 +383,7 @@ async function parseLibrary(takeout_dir: string): Promise<IAlbum[]> {
     }));
 
     // Now, find IDs for all the photos in Photos!
+    console.log("Finding existing photos in Photos app (this may take a while)...");
     albums.forEach((a) => {
         const images_to_find = a.content.map((i) => {
             // Again:
@@ -397,7 +398,13 @@ async function parseLibrary(takeout_dir: string): Promise<IAlbum[]> {
             };
         });
         const ids = findPhotoInPhotos(images_to_find);
-        console.log(ids);
+        const foundTotal = ids.filter((i) => !!i).length;
+        const imageCount = a.content.length;
+        if (foundTotal === imageCount) {
+            console.log(`Found for album ${a.title} - all ${imageCount}`);
+        } else {
+            console.log(`Found for album ${a.title} - ${foundTotal} / ${imageCount}`);
+        }
         for (let i = 0; i < ids.length; i++) {
             a.content[i].photosId = ids[i];
         }
@@ -474,9 +481,16 @@ async function main() {
     // Long names (>51 chars) like
     // `57129642196__B027A842-8129-4128-8354-E415D2100BB3.JPG` seem to confuse
     // Photos. We'll have detected them earlier, just log them here.
-    const misNamed = all_images.filter(i => i.manifest && path.parse(i.path).name !== path.parse(i.manifest.metadata.title).name);
-    console.log(`Manifest/name mismatch: ${misNamed.length}`);
-    misNamed.forEach((p) => {
+    // const misNamed = all_images.filter(i => i.manifest && path.parse(i.path).name !== path.parse(i.manifest.metadata.title).name);
+    // console.log(`Manifest/name mismatch: ${misNamed.length}`);
+    // misNamed.forEach((p) => {
+    //     console.log(p.path, /* path.parse(p.path).base, */ p.manifest?.metadata.title);
+    // });
+    // console.log();
+
+    const dateMismatch = all_images.filter(i => i.manifest && i.manifest.metadata.photoTakenTime.timestamp !== i.image?.metadata.Composite.SubSecDateTimeOriginal?.toString());
+    console.log(`Date mismatch: ${dateMismatch.length}`);
+    dateMismatch.forEach((p) => {
         console.log(p.path, /* path.parse(p.path).base, */ p.manifest?.metadata.title);
     });
     console.log();
@@ -487,63 +501,66 @@ async function main() {
     }
 
     // Actions
-    console.log();
-    console.log("Actions:");
-    console.log();
-    
-    console.log("- create missing albums");
-    const albums_to_create = albums.filter((a) => !a.photosId);
-    albums_to_create.forEach((a) => {
-        if (!WHAT_IF) {
-            a.photosId = findOrCreateAlbum(a.title);
-        }
+    if (DO_ACTIONS) {
 
-        console.log(`\t- ${a.title}`);
-    });
-
-    console.log("- move existing photos into albums");
-    albums.forEach((a) => {
-        const ids = a.content.map((c) => c.photosId).filter((id) => !!id) as string[];
-        addPhotosToAlbumIfMissing(a.title, ids, WHAT_IF);
-    });
-
-    console.log("- import missing photos (and add import tag)");
-    const run_id = crypto.randomBytes(16).toString("hex");
-    const renamedFilesDir = path.join(os.tmpdir(), "photos_import_renamed_images", run_id);
-    fs.mkdirSync(renamedFilesDir, { recursive: true });
-    console.log(`\t(created dir for renamed photos: ${renamedFilesDir})`);
-    albums.forEach((a) => {
-        const files = a.content.filter((c) => !c.photosId).map((c) => {
-            const desiredName = c.manifest && path.parse(c.manifest.metadata.title).name;
-            const currentName = path.parse(c.path).name;
-            const isMisnamed = c.manifest && desiredName !== currentName;
-            if (isMisnamed) {
-                const destinationName = path.join(renamedFilesDir, c.manifest!.metadata.title);
-                fs.copyFileSync(c.path, destinationName);
-                // TODO: copy both image and video to temp.
-                return [
-                    destinationName
-                ];
-            } else {
-                const files = [];
-                if (c.image) {
-                    files.push(c.image.metadata.SourceFile);
-                }
-                if (c.video) {
-                    files.push(c.video.metadata.format.filename);
-                }
-                return files;
+        console.log();
+        console.log("Actions:");
+        console.log();
+        
+        console.log("- create missing albums");
+        const albums_to_create = albums.filter((a) => !a.photosId);
+        albums_to_create.forEach((a) => {
+            if (!WHAT_IF) {
+                a.photosId = findOrCreateAlbum(a.title);
             }
-        }).flat();
-
-        console.log(`\t- Importing for ${a.title}:`);
-        // importPhotosToAlbum(a.title, files, WHAT_IF);
-        // if (!WHAT_IF) {
-            files.forEach((f) => {
-                console.log(`\t\t- ${f}`);
-            });
-        // }
-    });
+    
+            console.log(`\t- ${a.title}`);
+        });
+    
+        console.log("- move existing photos into albums");
+        albums.forEach((a) => {
+            const ids = a.content.map((c) => c.photosId).filter((id) => !!id) as string[];
+            addPhotosToAlbumIfMissing(a.title, ids, WHAT_IF);
+        });
+    
+        console.log("- import missing photos (and add import tag)");
+        const run_id = crypto.randomBytes(16).toString("hex");
+        const renamedFilesDir = path.join(os.tmpdir(), "photos_import_renamed_images", run_id);
+        fs.mkdirSync(renamedFilesDir, { recursive: true });
+        console.log(`\t(created dir for renamed photos: ${renamedFilesDir})`);
+        albums.forEach((a) => {
+            const files = a.content.filter((c) => !c.photosId).map((c) => {
+                const desiredName = c.manifest && path.parse(c.manifest.metadata.title).name;
+                const currentName = path.parse(c.path).name;
+                const isMisnamed = c.manifest && desiredName !== currentName;
+                if (isMisnamed) {
+                    const destinationName = path.join(renamedFilesDir, c.manifest!.metadata.title);
+                    fs.copyFileSync(c.path, destinationName);
+                    // TODO: copy both image and video to temp.
+                    return [
+                        destinationName
+                    ];
+                } else {
+                    const files = [];
+                    if (c.image) {
+                        files.push(c.image.metadata.SourceFile);
+                    }
+                    if (c.video) {
+                        files.push(c.video.metadata.format.filename);
+                    }
+                    return files;
+                }
+            }).flat();
+    
+            console.log(`\t- Importing for ${a.title}:`);
+            // importPhotosToAlbum(a.title, files, WHAT_IF);
+            // if (!WHAT_IF) {
+                files.forEach((f) => {
+                    console.log(`\t\t- ${f}`);
+                });
+            // }
+        });
+    }
 
     // const inspect = albums.slice(0, 3);
     // const inspect = albums.map(a => a.content).flat().filter(i => (!i.image != !i.video) && (i.image?.livePhotoId || i.video?.livePhotoId));
