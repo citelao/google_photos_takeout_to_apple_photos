@@ -150,7 +150,7 @@ export function findOrCreateAlbum(title: string) {
 
 export function addPhotosToAlbumIfMissing(album_name: string, photoIds: string[], what_if: boolean) {
     if (photoIds.length === 0) {
-        console.log(`Skipping ${album_name} - no photos to add.`);
+        console.log(`\tSkipping ${album_name} - no photos to add.`);
         return;
     }
 
@@ -167,6 +167,42 @@ export function addPhotosToAlbumIfMissing(album_name: string, photoIds: string[]
                 end if
                 
                 add {${photoIds.map((i) => `media item id "${i}"`).join(", ")}} to a
+            end tell
+        end run
+    `;
+
+    if (what_if) {
+        console.log(script);
+    } else {
+        const result = child_process.spawnSync("osascript", ["-", album_name], { input: script });
+        const output = result.stdout.toString("utf-8");
+        if (result.stderr.length != 0) {
+            throw new Error(result.stderr.toString("utf-8"));
+        }
+        return output;
+    }
+}
+
+export function importPhotosToAlbum(album_name: string, UNSAFE_files_ESCAPE_THESE: string[], what_if: boolean) {
+    if (UNSAFE_files_ESCAPE_THESE.length === 0) {
+        console.log(`\tSkipping ${album_name} - no photos to add.`);
+        return;
+    }
+
+    // Just concatenate the files for ease of editing. The album_name is still
+    // passed in as an arg to get it escaped nicely.
+    const script = `
+        on run argv
+            tell application "Photos"
+                set album_name to item 1 of argv
+                if (exists album named album_name) then
+                    set a to album named album_name
+                else
+                    set a to make new album named album_name
+                end if
+
+                set images to { ${UNSAFE_files_ESCAPE_THESE.map((f) => `"${f}" as POSIX file`).join(", ")} }
+                import images into a without skip check duplicates
             end tell
         end run
     `;

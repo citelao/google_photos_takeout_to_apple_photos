@@ -3,7 +3,7 @@ import path from "path";
 import exifr from "exifr";
 import { distance } from "./numbers";
 import { execAsync } from "./exec";
-import { getPhotosAlbums, findPhotoInPhotos, findOrCreateAlbum, addPhotosToAlbumIfMissing } from "./photos_app";
+import { getPhotosAlbums, findPhotoInPhotos, findOrCreateAlbum, addPhotosToAlbumIfMissing, importPhotosToAlbum } from "./photos_app";
 
 
 
@@ -484,16 +484,6 @@ async function main() {
     console.log();
     console.log("Actions:");
     console.log();
-
-    console.log("- import missing photos (and add import tag)");
-    notImported.forEach((i) => {
-        if (i.image) {
-            console.log(`\t- ${i.image.metadata.SourceFile}`);
-        }
-        if (i.video) {
-            console.log(`\t- ${i.video.metadata.format.filename}`);
-        }
-    });
     
     console.log("- create missing albums");
     const albums_to_create = albums.filter((a) => !a.photosId);
@@ -505,10 +495,32 @@ async function main() {
         console.log(`\t- ${a.title}`);
     });
 
-    console.log("- move photos into albums");
+    console.log("- move existing photos into albums");
     albums.forEach((a) => {
         const ids = a.content.map((c) => c.photosId).filter((id) => !!id) as string[];
         addPhotosToAlbumIfMissing(a.title, ids, WHAT_IF);
+    });
+
+    console.log("- import missing photos (and add import tag)");
+    albums.forEach((a) => {
+        const files = a.content.filter((c) => !c.photosId).map((c) => {
+            const files = [];
+            if (c.image) {
+                files.push(c.image.metadata.SourceFile);
+            }
+            if (c.video) {
+                files.push(c.video.metadata.format.filename);
+            }
+            return files;
+        }).flat();
+
+        console.log(`\t- Importing for ${a.title}:`);
+        importPhotosToAlbum(a.title, files, WHAT_IF);
+        if (!WHAT_IF) {
+            files.forEach((f) => {
+                console.log(`\t\t- ${f}`);
+            });
+        }
     });
 
     // const inspect = albums.slice(0, 3);
