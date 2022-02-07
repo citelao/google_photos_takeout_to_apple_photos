@@ -1,16 +1,34 @@
 import child_process from "child_process";
 
 export function getPhotosAlbums() {
+    // This was originally nested, but it's really annoying to deal with nested
+    // albums, so I'm not going to. I don't have them anyway.
+
+//     const GET_ALBUMS_NESTED_SCRIPT = `
+// on listContainer(cs)
+// 	set res to ""
+// 	repeat with c in cs
+// 		set res to res & "
+// " & name of c & ", " & id of c
+// 		if class of c is "container" then
+// 			set childs to my listContainer(containers of c)
+// 			set res to res & childs
+// 		end if
+// 	end repeat
+	
+// 	return res
+// end listContainer
+
+// tell application "Photos"
+// 	my listContainer(containers)
+// end tell
+// `;
     const GET_ALBUMS_SCRIPT = `
 on listContainer(cs)
 	set res to ""
 	repeat with c in cs
 		set res to res & "
 " & name of c & ", " & id of c
-		if class of c is "container" then
-			set childs to my listContainer(containers of c)
-			set res to res & childs
-		end if
 	end repeat
 	
 	return res
