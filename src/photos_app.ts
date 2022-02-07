@@ -123,3 +123,62 @@ export function findPhotoInPhotos(images: {image_filename: string, image_timesta
     ids.pop(); // The last one is always that extra scissor.
     return ids.map((i) => i.trim() || null);
 }
+
+export function findOrCreateAlbum(title: string) {
+    // Derived from https://github.com/akhudek/google-photos-to-apple-photos/blob/main/migrate-albums.py
+    const SCRIPT = `
+        on run argv
+            tell application "Photos"
+                set album_name to item 1 of argv
+                if (exists album named album_name) then
+                    set a to album named album_name
+                else
+                    set a to make new album named album_name
+                end if
+                
+                return id of a
+            end tell
+        end run
+    `;
+    const result = child_process.spawnSync("osascript", ["-", title], { input: SCRIPT });
+    const output = result.stdout.toString("utf-8");
+    if (result.stderr.length != 0) {
+        throw new Error(result.stderr.toString("utf-8"));
+    }
+    return output;
+}
+
+export function addPhotosToAlbumIfMissing(album_name: string, photoIds: string[], what_if: boolean) {
+    if (photoIds.length === 0) {
+        console.log(`Skipping ${album_name} - no photos to add.`);
+        return;
+    }
+
+    // Just concatenate the ids for ease of editing. The album_name is still
+    // passed in as an arg to get it escaped nicely.
+    const script = `
+        on run argv
+            tell application "Photos"
+                set album_name to item 1 of argv
+                if (exists album named album_name) then
+                    set a to album named album_name
+                else
+                    set a to make new album named album_name
+                end if
+                
+                add {${photoIds.map((i) => `media item id "${i}"`).join(", ")}} to a
+            end tell
+        end run
+    `;
+
+    if (what_if) {
+        console.log(script);
+    } else {
+        const result = child_process.spawnSync("osascript", ["-", album_name], { input: script });
+        const output = result.stdout.toString("utf-8");
+        if (result.stderr.length != 0) {
+            throw new Error(result.stderr.toString("utf-8"));
+        }
+        return output;
+    }
+}

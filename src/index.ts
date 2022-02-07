@@ -3,7 +3,16 @@ import path from "path";
 import exifr from "exifr";
 import { distance } from "./numbers";
 import { execAsync } from "./exec";
-import { getPhotosAlbums, findPhotoInPhotos } from "./photos_app";
+import { getPhotosAlbums, findPhotoInPhotos, findOrCreateAlbum, addPhotosToAlbumIfMissing } from "./photos_app";
+
+
+
+
+const WHAT_IF = true;
+
+
+
+
 
 interface ExifToolOutput {
     SourceFile: string;
@@ -488,9 +497,19 @@ async function main() {
     
     console.log("- create missing albums");
     const albums_to_create = albums.filter((a) => !a.photosId);
-    albums_to_create.forEach((a) => console.log(`\t- ${a.title}`));
+    albums_to_create.forEach((a) => {
+        if (!WHAT_IF) {
+            a.photosId = findOrCreateAlbum(a.title);
+        }
+
+        console.log(`\t- ${a.title}`);
+    });
 
     console.log("- move photos into albums");
+    albums.forEach((a) => {
+        const ids = a.content.map((c) => c.photosId).filter((id) => !!id) as string[];
+        addPhotosToAlbumIfMissing(a.title, ids, WHAT_IF);
+    });
 
     // const inspect = albums.slice(0, 3);
     // const inspect = albums.map(a => a.content).flat().filter(i => (!i.image != !i.video) && (i.image?.livePhotoId || i.video?.livePhotoId));
