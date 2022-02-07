@@ -476,15 +476,21 @@ async function main() {
     console.log("Actions:");
     console.log();
 
-    console.log("- import missing photos");
-    // TODO
+    console.log("- import missing photos (and add import tag)");
+    notImported.forEach((i) => {
+        if (i.image) {
+            console.log(`\t- ${i.image.metadata.SourceFile}`);
+        }
+        if (i.video) {
+            console.log(`\t- ${i.video.metadata.format.filename}`);
+        }
+    });
     
     console.log("- create missing albums");
     const albums_to_create = albums.filter((a) => !a.photosId);
     albums_to_create.forEach((a) => console.log(`\t- ${a.title}`));
 
-    // - create missing albums
-    // - move photos into albums
+    console.log("- move photos into albums");
 
     // const inspect = albums.slice(0, 3);
     // const inspect = albums.map(a => a.content).flat().filter(i => (!i.image != !i.video) && (i.image?.livePhotoId || i.video?.livePhotoId));
