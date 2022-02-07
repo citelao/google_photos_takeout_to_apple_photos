@@ -59,7 +59,7 @@ end tell
 export function findPhotoInPhotos(images: {image_filename: string, image_timestamp: number | string, image_size: number}[]): (string | null)[] {
     // Derived from https://github.com/akhudek/google-photos-to-apple-photos/blob/main/migrate-albums.py
     const DIVIDER = "✂";
-    const TIMESTAMP_TOLERANCE = "1";
+    const TIMESTAMP_TOLERANCE = "2";
     const FIND_PHOTO_SCRIPT = `
         on unixDate(datetime)
             set command to "date -j -f '%A, %B %e, %Y at %I:%M:%S %p' '" & datetime & "'"
