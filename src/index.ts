@@ -1,32 +1,9 @@
 import fs from "fs";
 import path from "path";
 import exifr from "exifr";
-import util from "util";
 import child_process from "child_process";
-const exec = util.promisify(require('child_process').exec);
-
-function toFixed(n: number | string, digits: number): number {
-    if (typeof n === "string") {
-        n = Number.parseFloat(n);
-    }
-    return Math.round((n + Number.EPSILON) * Math.pow(10, digits)) / Math.pow(10, digits);
-}
-
-function distance(a: { lat: number; lon: number; }, b: { lat: number; lon: number; }): number {
-    // console.log(a, b);
-    return Math.sqrt(Math.pow(a.lat - b.lat, 2) + Math.pow(a.lon - b.lon, 2));
-}
-
-async function execAsync(cmd: string): Promise<{ stdout: string; stderr: string; }> {
-    const result: { stdout: string, stderr: string } = await exec(cmd);
-
-    // TODO: handle errors?
-    // if (result.stderr) {
-    //     throw new Error(`exiftool failed: ${result.stderr}`);
-    // }
-
-    return result;
-}
+import { distance } from "./numbers";
+import { execAsync } from "./exec";
 
 interface ExifToolOutput {
     SourceFile: string;
