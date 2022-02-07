@@ -539,12 +539,12 @@ async function main() {
     // Long names (>51 chars) like
     // `57129642196__B027A842-8129-4128-8354-E415D2100BB3.JPG` seem to confuse
     // Photos. We'll have detected them earlier, just log them here.
-    const misNamed = all_images.filter(i => i.manifest && path.parse(i.path).name !== path.parse(i.manifest.metadata.title).name);
-    console.log(`Manifest/name mismatch: ${misNamed.length}`);
-    misNamed.forEach((p) => {
-        console.log(p.path, /* path.parse(p.path).base, */ p.manifest?.metadata.title);
-    });
-    console.log();
+    // const misNamed = all_images.filter(i => i.manifest && path.parse(i.path).name !== path.parse(i.manifest.metadata.title).name);
+    // console.log(`Manifest/name mismatch: ${misNamed.length}`);
+    // misNamed.forEach((p) => {
+    //     console.log(p.path, /* path.parse(p.path).base, */ p.manifest?.metadata.title);
+    // });
+    // console.log();
 
     if (!is_reading_existing_parse) {
         // Debug
