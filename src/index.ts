@@ -8,8 +8,8 @@ import { getPhotosAlbums, findPhotoInPhotos, findOrCreateAlbum, addPhotosToAlbum
 
 
 
-const DO_ACTIONS = false;
-const WHAT_IF = true;
+const DO_ACTIONS = true;
+const WHAT_IF = false;
 
 
 
@@ -389,12 +389,14 @@ async function parseLibrary(takeout_dir: string): Promise<IAlbum[]> {
             // Again:
             //
             // - the actual file name can be truncated if it's too long
-            // - that seems to also break the photoTakenTime in some cases; the
-            //   Google JSON manifest has the correct number. 
+            //
+            // TODO: this is still not finding any photos for Leah visits and several photos in Business Sophie in Business Bremerton.
             return {
                 image_filename: i.manifest?.metadata.title || path.basename(i.path),
-                image_timestamp:  i.manifest?.metadata.photoTakenTime.timestamp || i.image?.metadata.Composite.SubSecDateTimeOriginal || "", // TODO: date time for video?
-                image_size: fs.statSync(i.path).size,
+                image_timestamp:  i.image?.metadata.Composite.SubSecDateTimeOriginal || "", // TODO: date time for video?
+
+                // Prefer image path for size, since that's what Photos uses for Live Photos.
+                image_size: fs.statSync(i.image?.metadata.SourceFile || i.path).size, 
             };
         });
         const ids = findPhotoInPhotos(images_to_find);
@@ -553,12 +555,12 @@ async function main() {
             }).flat();
     
             console.log(`\t- Importing for ${a.title}:`);
-            // importPhotosToAlbum(a.title, files, WHAT_IF);
-            // if (!WHAT_IF) {
+            importPhotosToAlbum(a.title, files, WHAT_IF);
+            if (!WHAT_IF) {
                 files.forEach((f) => {
                     console.log(`\t\t- ${f}`);
                 });
-            // }
+            }
         });
     }
 
@@ -570,3 +572,13 @@ async function main() {
 }
 
 main();
+
+// const photos = [
+//     {
+//         image_filename: "IMG_2811.HEIC",
+//         image_timestamp: 1553394810,
+//         image_size: 433445,
+//     }
+// ];
+// console.log(photos);
+// console.log(findPhotoInPhotos(photos));
