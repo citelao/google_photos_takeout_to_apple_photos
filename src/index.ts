@@ -138,6 +138,43 @@ function parseImageMetadataJson(jsonPath: string): ImageMetadataJson {
     return json as ImageMetadataJson;
 }
 
+function getPhotosAlbums() {
+    const GET_ALBUMS_SCRIPT = `
+on listContainer(cs)
+	set res to ""
+	repeat with c in cs
+		set res to res & "
+" & name of c & ", " & id of c
+		if class of c is "container" then
+			set childs to my listContainer(containers of c)
+			set res to res & childs
+		end if
+	end repeat
+	
+	return res
+end listContainer
+
+tell application "Photos"
+	my listContainer(containers)
+end tell
+`;
+    const result = child_process.spawnSync("osascript", ["-"], { input: GET_ALBUMS_SCRIPT});
+    const output = result.stdout.toString("utf-8");
+    if (result.stderr.length != 0) {
+        throw new Error(result.stderr.toString("utf-8"));
+    }
+    const lines = output.split("\n");
+    const albums = lines.map((l) => {
+        const pts = l.split(", ");
+        return {
+            name: l[0],
+            id: l[1]
+        };
+    });
+
+    return albums;
+}
+
 function findPhotoInPhotos(images: {image_filename: string, image_timestamp: number | string, image_size: number}[]): (string | null)[] {
     // Derived from https://github.com/akhudek/google-photos-to-apple-photos/blob/main/migrate-albums.py
     const DIVIDER = "✂";
@@ -225,6 +262,7 @@ type ContentInfo = {
 interface IAlbum {
     title: string;
     dirs: string[];
+    photosId: string | null;
     metadata: MetadataJson | null;
     content: ContentInfo[];
     manifests: {
@@ -267,7 +305,9 @@ async function parseLibrary(takeout_dir: string): Promise<IAlbum[]> {
         }
         return acc;
     }, []);
-    
+
+    const photosAlbums = getPhotosAlbums();
+   
     const albums = await Promise.all(albumFolders.map(async (a) => {    
         const items = a.dirs.map((d) => fs.readdirSync(d).map(f => path.join(d, f)) ).flat();
         const VIDEO_TYPES = [
@@ -448,8 +488,11 @@ async function parseLibrary(takeout_dir: string): Promise<IAlbum[]> {
             }
         }
 
+        const correspondingPhotosAlbum = photosAlbums.find((pa) => pa.name === title);
+
         return {
             title: title,
+            photosId: correspondingPhotosAlbum?.id || null,
             dirs: a.dirs,
             metadata: metadata,
             content: parsed_images,
@@ -504,6 +547,11 @@ async function main() {
         if (a.metadata) {
             console.log("\t(has metadata)")
         }
+        if (a.photosId) {
+            console.log(`\t=> ID: ${a.photosId}`);
+        } else {
+            console.log(`\t=> (no Photos album)`);
+        }
         console.log(`\tManifests: ${a.manifests.length}`);
         const livePhotoCount = a.content.filter((c) => c.image?.livePhotoId).length;
         const notImported = a.content.filter((c) => !c.photosId).length;
@@ -550,6 +598,11 @@ async function main() {
         // Debug
         fs.writeFileSync("output.json", JSON.stringify(albums, undefined, 4));
     }
+
+    // Actions
+    // - import missing photos
+    // - create missing albums
+    // - move photos into albums
 
     // const inspect = albums.slice(0, 3);
     // const inspect = albums.map(a => a.content).flat().filter(i => (!i.image != !i.video) && (i.image?.livePhotoId || i.video?.livePhotoId));
