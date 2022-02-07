@@ -206,13 +206,33 @@ function findPhotoInPhotos(images: {image_filename: string, image_timestamp: num
     return ids.map((i) => i.trim() || null);
 }
 
-async function main() {
-    if (process.argv.length != 3) {
-        console.error(`Wrong number of arguments; try 'npm run go -- path/here/'\r\n\r\n(${process.argv})`);
-        process.exit(1);
+type ContentInfo = {
+    video?: {
+        metadata: FfprobeOutput;
+        livePhotoId?: string;
+    };
+    image?: {
+        metadata: ExifToolOutput;
+        livePhotoId?: string;
     }
-    
-    const takeout_dir = process.argv[2];
+    photosId?: string | null;
+    path: string;
+    manifest?: {
+        path: string;
+        metadata: ImageMetadataJson;
+    }
+};
+interface IAlbum {
+    title: string;
+    dirs: string[];
+    metadata: MetadataJson | null;
+    content: ContentInfo[];
+    manifests: {
+        path: string;
+        metadata: ImageMetadataJson;
+    }[];
+}
+async function parseLibrary(takeout_dir: string): Promise<IAlbum[]> {
     const files = fs.readdirSync(takeout_dir, { withFileTypes: true });
     
     // TODO: handle someone giving the "Google Photos" directory or a directory containing Google Photos directly.
@@ -296,22 +316,6 @@ async function main() {
         const exifs = (await Promise.all(a.dirs.map(async (d) => await getExifToolDataForDirectory(d)))).flat();
 
         // Ensure we have JSONs for each image/movie:
-        type ContentInfo = {
-            video?: {
-                metadata: FfprobeOutput;
-                livePhotoId?: string;
-            };
-            image?: {
-                metadata: ExifToolOutput;
-                livePhotoId?: string;
-            }
-            photosId?: string | null;
-            path: string;
-            manifest?: {
-                path: string;
-                metadata: ImageMetadataJson;
-            }
-        };
         const parsed_images: ContentInfo[] = [];
         for (const itemPath of images_and_movies) {
             const quickImageName = path.basename(itemPath);
@@ -469,6 +473,25 @@ async function main() {
         }
     });
 
+    return albums;
+}
+
+async function main() {
+    if (process.argv.length != 3) {
+        console.error(`Wrong number of arguments; try 'npm run go -- path/here/'\r\n\r\n(${process.argv})`);
+        process.exit(1);
+    }
+    
+    const takeout_dir = process.argv[2];
+    const is_reading_existing_parse = path.extname(takeout_dir) === ".json";
+    let albums: IAlbum[];
+    if (is_reading_existing_parse) {
+        const library_data = fs.readFileSync(takeout_dir);
+        albums = JSON.parse(library_data.toString('utf-8')) as IAlbum[];
+    } else {
+        albums = await parseLibrary(takeout_dir);
+    }
+
     console.log();
     
     albums.forEach((a) => {
@@ -483,11 +506,12 @@ async function main() {
         }
         console.log(`\tManifests: ${a.manifests.length}`);
         const livePhotoCount = a.content.filter((c) => c.image?.livePhotoId).length;
+        const notImported = a.content.filter((c) => !c.photosId).length;
         const noManifest = a.content.filter((c) => !c.manifest).length; // TODO: do something with this.
         if (noManifest) {
-            console.log(`\tActual images: ${a.content.length} (${livePhotoCount} are live) (no manifest: ${noManifest})`);
+            console.log(`\tActual images: ${a.content.length} (${livePhotoCount} are live) (${notImported} not imported) (no manifest: ${noManifest})`);
         } else {
-            console.log(`\tActual images: ${a.content.length} (${livePhotoCount} are live)`);
+            console.log(`\tActual images: ${a.content.length} (${livePhotoCount} are live) (${notImported} not imported)`);
         }
         console.log();
     });
@@ -522,8 +546,10 @@ async function main() {
     });
     console.log();
 
-    // Debug
-    fs.writeFileSync("output.json", JSON.stringify(albums, undefined, 4));
+    if (!is_reading_existing_parse) {
+        // Debug
+        fs.writeFileSync("output.json", JSON.stringify(albums, undefined, 4));
+    }
 
     // const inspect = albums.slice(0, 3);
     // const inspect = albums.map(a => a.content).flat().filter(i => (!i.image != !i.video) && (i.image?.livePhotoId || i.video?.livePhotoId));
