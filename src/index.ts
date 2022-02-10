@@ -490,7 +490,18 @@ async function main() {
     // });
     // console.log();
 
-    const dateMismatch = all_images.filter(i => i.manifest && i.manifest.metadata.photoTakenTime.timestamp !== i.image?.metadata.Composite.SubSecDateTimeOriginal?.toString());
+    const dateMismatch = all_images.filter(i => {
+        if (!i.manifest) { return false; }
+
+        const googleTime = parseInt(i.manifest.metadata.photoTakenTime.timestamp);
+        const photoTime = i.image?.metadata.Composite.SubSecDateTimeOriginal;
+        if (!photoTime) {
+            return false;
+        }
+
+        const timeDiff = Math.abs(googleTime - photoTime);
+        return timeDiff > 2;
+    });
     console.log(`Date mismatch: ${dateMismatch.length}`);
     dateMismatch.forEach((p) => {
         console.log(p.path, /* path.parse(p.path).base, */ p.manifest?.metadata.title);
