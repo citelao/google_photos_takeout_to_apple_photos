@@ -613,14 +613,17 @@ async function main() {
                     console.log(`\t\t- ${f}`);
                 });
             }
-            if (newIds.length === nonImportedPhotos.length) {
-                for (let index = 0; index < nonImportedPhotos.length; index++) {
-                    nonImportedPhotos[index].photosId = newIds[index];
-                }
-            } else {
-                // TODO... we have to match stuffff....
-                console.log(`TODO: ${newIds.length} imported for ${nonImportedPhotos.length} photos (${files.length} files)`);
-            }
+
+            // If we want to validate later: (but for now we don't really care)
+
+            // if (newIds.length === nonImportedPhotos.length) {
+            //     for (let index = 0; index < nonImportedPhotos.length; index++) {
+            //         nonImportedPhotos[index].photosId = newIds[index];
+            //     }
+            // } else {
+            //     // TODO... we have to match stuffff....
+            //     console.log(`TODO: ${newIds.length} imported for ${nonImportedPhotos.length} photos (${files.length} files)`);
+            // }
         });
     }
 
