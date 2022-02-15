@@ -133,6 +133,7 @@ type ContentInfo = {
     image?: {
         metadata: ExifToolOutput;
         livePhotoId?: string;
+        size: number;
     }
     photosId?: string | null;
     path: string;
@@ -351,7 +352,8 @@ async function parseLibrary(takeout_dir: string): Promise<IAlbum[]> {
                 } else {
                     parsed_images[existingIndex].image = {
                         livePhotoId: livePhotoId,
-                        metadata: metadata as ExifToolOutput
+                        metadata: metadata as ExifToolOutput,
+                        size: fs.statSync(itemPath).size,
                     };
                 }
             } else {
@@ -364,6 +366,7 @@ async function parseLibrary(takeout_dir: string): Promise<IAlbum[]> {
                     image: (isVideo) ? undefined : {
                         livePhotoId: livePhotoId,
                         metadata: metadata as ExifToolOutput,
+                        size: fs.statSync(itemPath).size,
                     },
                     video: (!isVideo) ? undefined : {
                         livePhotoId: livePhotoId,
@@ -410,7 +413,7 @@ async function parseLibrary(takeout_dir: string): Promise<IAlbum[]> {
                 image_timestamp:  i.image?.metadata.Composite.SubSecDateTimeOriginal || "", // TODO: date time for video?
 
                 // Prefer image path for size, since that's what Photos uses for Live Photos.
-                image_size: fs.statSync(i.image?.metadata.SourceFile || i.path).size, 
+                image_size: i.image?.size || 0, // TODO: what if no image? 
             };
         });
         const ids = findPhotoInPhotos(images_to_find);
