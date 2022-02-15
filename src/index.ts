@@ -575,10 +575,24 @@ async function main() {
                 if (isMisnamed) {
                     const destinationName = path.join(renamedFilesDir, c.manifest!.metadata.title);
                     fs.copyFileSync(c.path, destinationName);
-                    // TODO: copy both image and video to temp.
-                    return [
-                        destinationName
-                    ];
+                    if (c.image && c.video) {
+                        // Add the other thing, image or video.
+                        const isMainItemAnImage = path.extname(destinationName) === path.extname(c.image.metadata.SourceFile);
+                        const additionalPathToUse = (isMainItemAnImage) ? c.video.metadata.format.filename : c.image.metadata.SourceFile;
+                        const newExt = path.extname(additionalPathToUse);
+                        const rawPath = destinationName.substring(0, destinationName.indexOf(path.extname(destinationName)));
+                        const extraPath = rawPath + newExt;
+                        fs.copyFileSync(additionalPathToUse, extraPath);
+
+                        return [
+                            destinationName,
+                            extraPath
+                        ];
+                    } else {
+                        return [
+                            destinationName
+                        ];
+                    }
                 } else {
                     const files = [];
                     if (c.image) {
