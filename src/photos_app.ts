@@ -148,6 +148,35 @@ export function findOrCreateAlbum(title: string) {
     return output;
 }
 
+export function getAlbumPhotosCount(album_id: string) {
+    // Derived from https://github.com/akhudek/google-photos-to-apple-photos/blob/main/migrate-albums.py
+    const NOT_FOUND = "NOT FOUND";
+    const SCRIPT = `
+        on run argv
+            tell application "Photos"
+                set album_id to item 1 of argv
+                if (exists album id album_id) then
+                    set a to album id album_id
+                    return count of media item in a
+                else
+                    return "${NOT_FOUND}"
+                end if
+            end tell
+        end run
+    `;
+    const result = child_process.spawnSync("osascript", ["-", album_id], { input: SCRIPT });
+    const output = result.stdout.toString("utf-8");
+    if (result.stderr.length != 0) {
+        throw new Error(result.stderr.toString("utf-8"));
+    }
+
+    if (output === NOT_FOUND) {
+        return null;
+    }
+
+    return parseInt(output);
+}
+
 export function addPhotosToAlbumIfMissing(album_name: string, photoIds: string[], what_if: boolean) {
     if (photoIds.length === 0) {
         console.log(`\tSkipping ${album_name} - no photos to add.`);
