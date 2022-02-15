@@ -4,7 +4,7 @@ import os from "os";
 import crypto from "crypto";
 import { distance } from "./numbers";
 import { execAsync } from "./exec";
-import { getPhotosAlbums, findPhotoInPhotos, findOrCreateAlbum, addPhotosToAlbumIfMissing, importPhotosToAlbum, getAlbumPhotosCount } from "./photos_app";
+import { getPhotosAlbums, findPhotoInPhotos, findOrCreateAlbum, addPhotosToAlbumIfMissing, importPhotosToAlbum, getAlbumPhotosCount, getInfoForPhotoIds } from "./photos_app";
 
 
 
@@ -142,6 +142,27 @@ type ContentInfo = {
         metadata: ImageMetadataJson;
     }
 };
+
+function getImageInfo(i: ContentInfo) {
+    // Again:
+    //
+    // - the actual file name can be truncated if it's too long
+    //
+    // TODO: this is still not finding any photos for Leah visits.
+    //
+    // TODO: switching between Google's date and the EXIF date can fix
+    // some timestamp errors but causes others. Also, DSLRs dates are
+    // super wrong sometimes. I think we need to use an actual image
+    // diff if we have options that match in size but not in timestamp.
+    return {
+        image_filename: i.manifest?.metadata.title || path.basename(i.path),
+        image_timestamp:  i.image?.metadata.Composite.SubSecDateTimeOriginal || "", // TODO: date time for video?
+
+        // Prefer image path for size, since that's what Photos uses for Live Photos.
+        image_size: i.image?.size || 0, // TODO: what if no image? 
+    };
+}
+
 interface IAlbum {
     title: string;
     dirs: string[];
@@ -397,25 +418,7 @@ async function parseLibrary(takeout_dir: string): Promise<IAlbum[]> {
     // Now, find IDs for all the photos in Photos!
     console.log("Finding existing photos in Photos app (this may take a while)...");
     albums.forEach((a) => {
-        const images_to_find = a.content.map((i) => {
-            // Again:
-            //
-            // - the actual file name can be truncated if it's too long
-            //
-            // TODO: this is still not finding any photos for Leah visits.
-            //
-            // TODO: switching between Google's date and the EXIF date can fix
-            // some timestamp errors but causes others. Also, DSLRs dates are
-            // super wrong sometimes. I think we need to use an actual image
-            // diff if we have options that match in size but not in timestamp.
-            return {
-                image_filename: i.manifest?.metadata.title || path.basename(i.path),
-                image_timestamp:  i.image?.metadata.Composite.SubSecDateTimeOriginal || "", // TODO: date time for video?
-
-                // Prefer image path for size, since that's what Photos uses for Live Photos.
-                image_size: i.image?.size || 0, // TODO: what if no image? 
-            };
-        });
+        const images_to_find = a.content.map((i) => getImageInfo(i));
         const ids = findPhotoInPhotos(images_to_find);
         const foundTotal = ids.filter((i) => !!i).length;
         const imageCount = a.content.length;
@@ -614,17 +617,26 @@ async function main() {
                 });
             }
 
-            // If we want to validate later: (but for now we don't really care)
+            const importedImageInfo = getInfoForPhotoIds(newIds);
+            importedImageInfo.forEach((img) => {
+                const corresponding = a.content.findIndex((c) => {
+                    const info = getImageInfo(c);
+                    return (info.image_filename === img.filename) &&
+                        (info.image_size === img.size) &&
+                        (info.image_timestamp === img.timestamp);
+                });
+                if (corresponding === -1) {
+                    throw new Error(`Could not find image in json for imported file - ${img.filename} size: ${img.size}, timestamp: ${img.timestamp} (${img.id})`);
+                }
 
-            // if (newIds.length === nonImportedPhotos.length) {
-            //     for (let index = 0; index < nonImportedPhotos.length; index++) {
-            //         nonImportedPhotos[index].photosId = newIds[index];
-            //     }
-            // } else {
-            //     // TODO... we have to match stuffff....
-            //     console.log(`TODO: ${newIds.length} imported for ${nonImportedPhotos.length} photos (${files.length} files)`);
-            // }
+                a.content[corresponding].photosId = img.id;
+            });
         });
+
+        // if (!is_reading_existing_parse) {
+            // Debug
+            fs.writeFileSync("final.json", JSON.stringify(albums, undefined, 4));
+        // }
     }
 
     // const inspect = albums.slice(0, 3);
@@ -645,3 +657,7 @@ main();
 // ];
 // console.log(photos);
 // console.log(findPhotoInPhotos(photos));
+
+// console.log(getInfoForPhotoIds([
+//     "C089130D-0123-44E3-A5C1-74F6A4D63E82/L0/001",
+// ]));
