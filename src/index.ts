@@ -621,15 +621,23 @@ async function main() {
             importedImageInfo.forEach((img) => {
                 const corresponding = a.content.findIndex((c) => {
                     const info = getImageInfo(c);
-                    // Man, these timestamps just *love* causing trouble. Ignore
-                    // them for now. We eventually throw if there are duplicatly
-                    // named files+sizes.
-                    return (info.image_filename === img.filename) &&
-                        (info.image_size === img.size) /* &&
+                    // Man, these timestamps & sizes just *love* causing
+                    // trouble. Ignore them for now. We eventually throw if
+                    // there are duplicatly named files.
+                    return (info.image_filename === img.filename) /* &&
+                        (info.image_size === img.size) &&
                         (info.image_timestamp === img.timestamp) */;
                 });
                 if (corresponding === -1) {
-                    throw new Error(`Could not find image in json for imported file - ${img.filename} size: ${img.size}, timestamp: ${img.timestamp} (${img.id})`);
+                    const hasItemsWithNoManifest = a.content.filter((c) => !c.manifest).length !== 0;
+                    if (hasItemsWithNoManifest) {
+                        // We could simply have an item that *needs* a rename
+                        // and doesn't get one because we are missing a
+                        // manifest. Warn instead.
+                        console.log(`WARNING: Could not find image in json for imported file - ${img.filename} size: ${img.size}, timestamp: ${img.timestamp} (${img.id})`);
+                    } else {
+                        throw new Error(`Could not find image in json for imported file - ${img.filename} size: ${img.size}, timestamp: ${img.timestamp} (${img.id})`);
+                    }
                 }
 
                 if (a.content[corresponding].photosId) {
