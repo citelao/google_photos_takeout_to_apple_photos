@@ -9,7 +9,7 @@ import { getPhotosAlbums, findPhotoInPhotos, findOrCreateAlbum, addPhotosToAlbum
 
 
 const DO_ACTIONS = true;
-const WHAT_IF = false;
+const WHAT_IF = true;
 
 
 
@@ -144,7 +144,10 @@ type ContentInfo = {
 interface IAlbum {
     title: string;
     dirs: string[];
-    photosId: string | null;
+    existingPhotosInfo: { 
+        id: string;
+        originalCount: number;
+    } | null;
     metadata: MetadataJson | null;
     content: ContentInfo[];
     manifests: {
@@ -190,7 +193,7 @@ async function parseLibrary(takeout_dir: string): Promise<IAlbum[]> {
 
     const photosAlbums = getPhotosAlbums();
    
-    const albums = await Promise.all(albumFolders.map(async (a) => {    
+    const albums = await Promise.all(albumFolders.map(async (a): Promise<IAlbum> => {    
         const items = a.dirs.map((d) => fs.readdirSync(d).map(f => path.join(d, f)) ).flat();
         const VIDEO_TYPES = [
             ".MOV",
@@ -371,10 +374,16 @@ async function parseLibrary(takeout_dir: string): Promise<IAlbum[]> {
         }
 
         const correspondingPhotosAlbum = photosAlbums.find((pa) => pa.name === title);
+        const photosInfo = (correspondingPhotosAlbum)
+            ? {
+                id: correspondingPhotosAlbum.id,
+                originalCount: getAlbumPhotosCount(correspondingPhotosAlbum.id)!
+            }
+            : null;
 
         return {
             title: title,
-            photosId: correspondingPhotosAlbum?.id || null,
+            existingPhotosInfo: photosInfo,
             dirs: a.dirs,
             metadata: metadata,
             content: parsed_images,
@@ -390,7 +399,12 @@ async function parseLibrary(takeout_dir: string): Promise<IAlbum[]> {
             //
             // - the actual file name can be truncated if it's too long
             //
-            // TODO: this is still not finding any photos for Leah visits and several photos in Business Sophie in Business Bremerton.
+            // TODO: this is still not finding any photos for Leah visits.
+            //
+            // TODO: switching between Google's date and the EXIF date can fix
+            // some timestamp errors but causes others. Also, DSLRs dates are
+            // super wrong sometimes. I think we need to use an actual image
+            // diff if we have options that match in size but not in timestamp.
             return {
                 image_filename: i.manifest?.metadata.title || path.basename(i.path),
                 image_timestamp:  i.image?.metadata.Composite.SubSecDateTimeOriginal || "", // TODO: date time for video?
@@ -443,9 +457,13 @@ async function main() {
         if (a.metadata) {
             console.log("\t(has metadata)")
         }
-        if (a.photosId) {
-            const count = getAlbumPhotosCount(a.photosId);
-            console.log(`\t=> ID: ${a.photosId} (items: ${count})`);
+        if (a.existingPhotosInfo) {
+            console.log(`\t=> ID: ${a.existingPhotosInfo.id}`);
+
+            // We don't really handle existing photos well.
+            if (a.existingPhotosInfo.originalCount) {
+                console.log(`\t\tWARNING: existing photos: ${a.existingPhotosInfo.originalCount}`);
+            }
         } else {
             console.log(`\t=> (no Photos album)`);
         }
@@ -522,10 +540,14 @@ async function main() {
         console.log();
         
         console.log("- create missing albums");
-        const albums_to_create = albums.filter((a) => !a.photosId);
+        const albums_to_create = albums.filter((a) => !a.existingPhotosInfo);
         albums_to_create.forEach((a) => {
             if (!WHAT_IF) {
-                a.photosId = findOrCreateAlbum(a.title);
+                const id = findOrCreateAlbum(a.title);
+                a.existingPhotosInfo = {
+                    id: id,
+                    originalCount: 0,
+                }
             }
     
             console.log(`\t- ${a.title}`);
@@ -534,7 +556,7 @@ async function main() {
         console.log("- move existing photos into albums");
         albums.forEach((a) => {
             const ids = a.content.map((c) => c.photosId).filter((id) => !!id) as string[];
-            addPhotosToAlbumIfMissing(a.title, ids, WHAT_IF);
+            const added = addPhotosToAlbumIfMissing(a.title, ids, WHAT_IF);
         });
     
         console.log("- import missing photos (and add import tag)");
@@ -583,7 +605,7 @@ async function main() {
     // console.log(inspect.length);
 }
 
-main();
+// main();
 
 // const photos = [
 //     {
@@ -594,3 +616,62 @@ main();
 // ];
 // console.log(photos);
 // console.log(findPhotoInPhotos(photos));
+
+const photos = [
+    "/Users/citelao/Downloads/takeout/Takeout 3/Google Photos/Israel 2017/IMG_0901.JPG",
+    "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/DSC_0041.JPG",
+    "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/DSC_0043.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/DSC_0045.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/DSC_0049.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/DSC_0052.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/DSC_0056.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/DSC_0059.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/DSC_0062.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/DSC_0064.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/DSC_0071-ANIMATION.gif",
+    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/DSC_0074.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/DSC_0075.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/DSC_0077.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/DSC_0085.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/DSC_0088.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/DSC_0091.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/DSC_0092.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/DSC_0098.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/DSC_0101.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/DSC_0105.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/DSC_0108.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/DSC_0114.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/DSC_0115.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/IMG_0897.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/IMG_0899.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/IMG_0904.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/IMG_0908.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/IMG_0909.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/DSC_0119.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/DSC_0120.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/DSC_0121.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/DSC_0122.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/DSC_0125.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/DSC_0127.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/DSC_0132.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/DSC_0133.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/DSC_0140-edited.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/DSC_0140.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/DSC_0144.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/DSC_0145.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/DSC_0146.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/DSC_0148.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/DSC_0151.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/DSC_0155.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/DSC_0156.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/DSC_0164.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/IMG_0910.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/IMG_0918.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/IMG_0919.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/IMG_0920.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/IMG_0921.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/IMG_0923.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/IMG_0927.JPG",
+    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/IMG_0930.JPG"
+];
+importPhotosToAlbum("test", photos, false);

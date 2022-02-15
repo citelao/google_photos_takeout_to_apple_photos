@@ -177,10 +177,10 @@ export function getAlbumPhotosCount(album_id: string) {
     return parseInt(output);
 }
 
-export function addPhotosToAlbumIfMissing(album_name: string, photoIds: string[], what_if: boolean) {
+export function addPhotosToAlbumIfMissing(album_name: string, photoIds: string[], what_if: boolean): number {
     if (photoIds.length === 0) {
         console.log(`\tSkipping ${album_name} - no photos to add.`);
-        return;
+        return 0;
     }
 
     // Just concatenate the ids for ease of editing. The album_name is still
@@ -195,27 +195,33 @@ export function addPhotosToAlbumIfMissing(album_name: string, photoIds: string[]
                     set a to make new album named album_name
                 end if
                 
+                set originalCount to count of media item in a
                 add {${photoIds.map((i) => `media item id "${i}"`).join(", ")}} to a
+                set finalCount to count of media item in a
+                return finalCount - originalCount
             end tell
         end run
     `;
 
     if (what_if) {
         console.log(script);
+        return 0;
     } else {
         const result = child_process.spawnSync("osascript", ["-", album_name], { input: script });
         const output = result.stdout.toString("utf-8");
         if (result.stderr.length != 0) {
             throw new Error(result.stderr.toString("utf-8"));
         }
-        return output;
+
+        const addedCount = parseInt(output);
+        return addedCount;
     }
 }
 
-export function importPhotosToAlbum(album_name: string, UNSAFE_files_ESCAPE_THESE: string[], what_if: boolean) {
+export function importPhotosToAlbum(album_name: string, UNSAFE_files_ESCAPE_THESE: string[], what_if: boolean): string[] {
     if (UNSAFE_files_ESCAPE_THESE.length === 0) {
         console.log(`\tSkipping ${album_name} - no photos to add.`);
-        return;
+        return [];
     }
 
     // Just concatenate the files for ease of editing. The album_name is still
@@ -238,12 +244,22 @@ export function importPhotosToAlbum(album_name: string, UNSAFE_files_ESCAPE_THES
 
     if (what_if) {
         console.log(script);
+        return [];
     } else {
         const result = child_process.spawnSync("osascript", ["-", album_name], { input: script });
         const output = result.stdout.toString("utf-8");
         if (result.stderr.length != 0) {
             throw new Error(result.stderr.toString("utf-8"));
         }
-        return output;
+        if (output.trim().length === 0) {
+            return [];
+        }
+        const imported = output.trim().split(",");
+        console.log(imported);
+        const ids = imported.map((item) => {
+            return item.trim().match(/^media item id (.*?) of album id/)![1];
+        });
+        console.log(ids);
+        return ids;
     }
 }
