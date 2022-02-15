@@ -4,7 +4,7 @@ import os from "os";
 import crypto from "crypto";
 import { distance } from "./numbers";
 import { execAsync } from "./exec";
-import { getPhotosAlbums, findPhotoInPhotos, findOrCreateAlbum, addPhotosToAlbumIfMissing, importPhotosToAlbum } from "./photos_app";
+import { getPhotosAlbums, findPhotoInPhotos, findOrCreateAlbum, addPhotosToAlbumIfMissing, importPhotosToAlbum, getAlbumPhotosCount } from "./photos_app";
 
 
 
@@ -444,7 +444,8 @@ async function main() {
             console.log("\t(has metadata)")
         }
         if (a.photosId) {
-            console.log(`\t=> ID: ${a.photosId}`);
+            const count = getAlbumPhotosCount(a.photosId);
+            console.log(`\t=> ID: ${a.photosId} (items: ${count})`);
         } else {
             console.log(`\t=> (no Photos album)`);
         }
