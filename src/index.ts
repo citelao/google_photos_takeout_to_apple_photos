@@ -624,7 +624,9 @@ async function main() {
                     // Man, these timestamps & sizes just *love* causing
                     // trouble. Ignore them for now. We eventually throw if
                     // there are duplicatly named files.
-                    return (info.image_filename === img.filename) /* &&
+                    //
+                    // Also special case for videos.
+                    return (info.image_filename === img.filename || path.basename(c.video?.metadata.format.filename || "") === img.filename) /* &&
                         (info.image_size === img.size) &&
                         (info.image_timestamp === img.timestamp) */;
                 });
