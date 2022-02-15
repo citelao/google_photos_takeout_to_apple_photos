@@ -263,3 +263,59 @@ export function importPhotosToAlbum(album_name: string, UNSAFE_files_ESCAPE_THES
         return ids;
     }
 }
+
+export function getInfoForPhotoIds(UNSAFE_ids_ESCAPE_THESE: string[]): { filename: string; size: number; timestamp: number; }[] {
+    if (UNSAFE_ids_ESCAPE_THESE.length === 0) {
+        return [];
+    }
+
+    // Just concatenate the files for ease of editing.
+    const DATA_POINT_DIVIDER = "✂";
+    const ITEM_DIVIDER = "☇";
+    const script = `
+        on unixDate(datetime)
+            set command to "date -j -f '%A, %B %e, %Y at %I:%M:%S %p' '" & datetime & "'"
+            set command to command & " +%s"
+            
+            set theUnixDate to do shell script command
+            return theUnixDate
+        end unixDate
+
+        on run argv
+            tell application "Photos"
+                set output to ""
+                set ids to { ${UNSAFE_ids_ESCAPE_THESE.map((i) => `"${i}"`).join(", ")} }
+                repeat with i in ids
+                    set img to media item id i
+                    set output to output & (filename of img) & "${DATA_POINT_DIVIDER}" & (size of img) & "${DATA_POINT_DIVIDER}" & (my unixDate(get date of img)) & "${ITEM_DIVIDER}"
+                end repeat
+
+                return output
+            end tell
+        end run
+    `;
+
+        const result = child_process.spawnSync("osascript", ["-"], { input: script });
+        const output = result.stdout.toString("utf-8");
+        if (result.stderr.length != 0) {
+            throw new Error(result.stderr.toString("utf-8"));
+        }
+        if (output.trim().length === 0) {
+            return [];
+        }
+        const items = output.trim().split(ITEM_DIVIDER);
+        items.pop(); // Last one is blank
+        // console.log(items);
+        const images = items.map((s) => {
+            const parts = s.split(DATA_POINT_DIVIDER);
+            const filename = parts[0];
+            const size = parseInt(parts[1]);
+            const timestamp = parseInt(parts[2]);
+            return {
+                filename: filename,
+                size: size,
+                timestamp: timestamp
+            }
+        });
+        return images;
+}
