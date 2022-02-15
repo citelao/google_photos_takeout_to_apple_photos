@@ -652,6 +652,10 @@ async function main() {
             });
         });
 
+        console.log();
+        console.log("Import complete! Here's what's left (basically: files that Photos thought were duplicates; you'll need to add them to albums manually.");
+        console.log();
+
         // Summarize import.
         albums.forEach((a) => {
             const notImported = a.content.filter((c) => !c.photosId);
