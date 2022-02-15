@@ -255,11 +255,11 @@ export function importPhotosToAlbum(album_name: string, UNSAFE_files_ESCAPE_THES
             return [];
         }
         const imported = output.trim().split(",");
-        console.log(imported);
+        // console.log(imported);
         const ids = imported.map((item) => {
             return item.trim().match(/^media item id (.*?) of album id/)![1];
         });
-        console.log(ids);
+        // console.log(ids);
         return ids;
     }
 }
