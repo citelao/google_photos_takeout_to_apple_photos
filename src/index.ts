@@ -635,13 +635,15 @@ async function main() {
                         // and doesn't get one because we are missing a
                         // manifest. Warn instead.
                         console.log(`WARNING: Could not find image in json for imported file - ${img.filename} size: ${img.size}, timestamp: ${img.timestamp} (${img.id})`);
+                        return;
                     } else {
                         throw new Error(`Could not find image in json for imported file - ${img.filename} size: ${img.size}, timestamp: ${img.timestamp} (${img.id})`);
                     }
                 }
 
                 if (a.content[corresponding].photosId) {
-                    throw new Error(`Already have an ID for file - ${img.filename} size: ${img.size}, timestamp: ${img.timestamp} (${img.id})`);
+                    console.log(`WARNING: Already have an ID for file - ${img.filename} size: ${img.size}, timestamp: ${img.timestamp} (${img.id})`);
+                    return;
                 }
 
                 a.content[corresponding].photosId = img.id;
