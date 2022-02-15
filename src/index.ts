@@ -568,7 +568,8 @@ async function main() {
         fs.mkdirSync(renamedFilesDir, { recursive: true });
         console.log(`\t(created dir for renamed photos: ${renamedFilesDir})`);
         albums.forEach((a) => {
-            const files = a.content.filter((c) => !c.photosId).map((c) => {
+            const nonImportedPhotos = a.content.filter((c) => !c.photosId);
+            const files = nonImportedPhotos.map((c) => {
                 const desiredName = c.manifest && path.parse(c.manifest.metadata.title).name;
                 const currentName = path.parse(c.path).name;
                 const isMisnamed = c.manifest && desiredName !== currentName;
@@ -606,11 +607,19 @@ async function main() {
             }).flat();
     
             console.log(`\t- Importing for ${a.title}:`);
-            importPhotosToAlbum(a.title, files, WHAT_IF);
+            const newIds = importPhotosToAlbum(a.title, files, WHAT_IF);
             if (!WHAT_IF) {
                 files.forEach((f) => {
                     console.log(`\t\t- ${f}`);
                 });
+            }
+            if (newIds.length === nonImportedPhotos.length) {
+                for (let index = 0; index < nonImportedPhotos.length; index++) {
+                    nonImportedPhotos[index].photosId = newIds[index];
+                }
+            } else {
+                // TODO... we have to match stuffff....
+                console.log(`TODO: ${newIds.length} imported for ${nonImportedPhotos.length} photos (${files.length} files)`);
             }
         });
     }
@@ -622,7 +631,7 @@ async function main() {
     // console.log(inspect.length);
 }
 
-// main();
+main();
 
 // const photos = [
 //     {
@@ -633,62 +642,3 @@ async function main() {
 // ];
 // console.log(photos);
 // console.log(findPhotoInPhotos(photos));
-
-const photos = [
-    "/Users/citelao/Downloads/takeout/Takeout 3/Google Photos/Israel 2017/IMG_0901.JPG",
-    "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/DSC_0041.JPG",
-    "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/DSC_0043.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/DSC_0045.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/DSC_0049.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/DSC_0052.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/DSC_0056.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/DSC_0059.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/DSC_0062.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/DSC_0064.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/DSC_0071-ANIMATION.gif",
-    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/DSC_0074.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/DSC_0075.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/DSC_0077.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/DSC_0085.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/DSC_0088.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/DSC_0091.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/DSC_0092.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/DSC_0098.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/DSC_0101.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/DSC_0105.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/DSC_0108.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/DSC_0114.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/DSC_0115.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/IMG_0897.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/IMG_0899.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/IMG_0904.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/IMG_0908.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 5/Google Photos/Israel 2017/IMG_0909.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/DSC_0119.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/DSC_0120.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/DSC_0121.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/DSC_0122.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/DSC_0125.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/DSC_0127.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/DSC_0132.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/DSC_0133.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/DSC_0140-edited.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/DSC_0140.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/DSC_0144.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/DSC_0145.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/DSC_0146.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/DSC_0148.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/DSC_0151.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/DSC_0155.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/DSC_0156.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/DSC_0164.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/IMG_0910.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/IMG_0918.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/IMG_0919.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/IMG_0920.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/IMG_0921.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/IMG_0923.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/IMG_0927.JPG",
-    // "/Users/citelao/Downloads/takeout/Takeout 6/Google Photos/Israel 2017/IMG_0930.JPG"
-];
-importPhotosToAlbum("test", photos, false);
