@@ -264,7 +264,7 @@ export function importPhotosToAlbum(album_name: string, UNSAFE_files_ESCAPE_THES
     }
 }
 
-export function getInfoForPhotoIds(UNSAFE_ids_ESCAPE_THESE: string[]): { filename: string; size: number; timestamp: number; }[] {
+export function getInfoForPhotoIds(UNSAFE_ids_ESCAPE_THESE: string[]): { id: string; filename: string; size: number; timestamp: number; }[] {
     if (UNSAFE_ids_ESCAPE_THESE.length === 0) {
         return [];
     }
@@ -306,12 +306,13 @@ export function getInfoForPhotoIds(UNSAFE_ids_ESCAPE_THESE: string[]): { filenam
         const items = output.trim().split(ITEM_DIVIDER);
         items.pop(); // Last one is blank
         // console.log(items);
-        const images = items.map((s) => {
+        const images = items.map((s, i) => {
             const parts = s.split(DATA_POINT_DIVIDER);
             const filename = parts[0];
             const size = parseInt(parts[1]);
             const timestamp = parseInt(parts[2]);
             return {
+                id: UNSAFE_ids_ESCAPE_THESE[i],
                 filename: filename,
                 size: size,
                 timestamp: timestamp
