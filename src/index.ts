@@ -9,7 +9,7 @@ import { getPhotosAlbums, findPhotoInPhotos, findOrCreateAlbum, addPhotosToAlbum
 
 
 const DO_ACTIONS = true;
-const WHAT_IF = true;
+const WHAT_IF = false;
 
 
 
@@ -621,16 +621,37 @@ async function main() {
             importedImageInfo.forEach((img) => {
                 const corresponding = a.content.findIndex((c) => {
                     const info = getImageInfo(c);
+                    // Man, these timestamps just *love* causing trouble. Ignore
+                    // them for now. We eventually throw if there are duplicatly
+                    // named files+sizes.
                     return (info.image_filename === img.filename) &&
-                        (info.image_size === img.size) &&
-                        (info.image_timestamp === img.timestamp);
+                        (info.image_size === img.size) /* &&
+                        (info.image_timestamp === img.timestamp) */;
                 });
                 if (corresponding === -1) {
                     throw new Error(`Could not find image in json for imported file - ${img.filename} size: ${img.size}, timestamp: ${img.timestamp} (${img.id})`);
                 }
 
+                if (a.content[corresponding].photosId) {
+                    throw new Error(`Already have an ID for file - ${img.filename} size: ${img.size}, timestamp: ${img.timestamp} (${img.id})`);
+                }
+
                 a.content[corresponding].photosId = img.id;
             });
+        });
+
+        // Summarize import.
+        albums.forEach((a) => {
+            const notImported = a.content.filter((c) => !c.photosId);
+
+            if (notImported.length === 0) {
+                console.log(`${a.title} => all imported.`);
+            } else {
+                console.log(`${a.title} => missing ${notImported.length}:`);
+                notImported.forEach((c) => {
+                    console.log(`\t- ${c.path}`);
+                });
+            }
         });
 
         // if (!is_reading_existing_parse) {
