@@ -1,3 +1,4 @@
+import chalk from "chalk";
 import child_process from "child_process";
 import Logger from "./logger";
 
@@ -239,7 +240,7 @@ export function chunked<T, O>(array: T[], chunk_size: number, fn: (input: T[], i
 export function importPhotosToAlbumChunked(album_name: string, UNSAFE_files_ESCAPE_THESE: string[], what_if: boolean): string[] {
     const CHUNK_SIZE = 200;
     return chunked(UNSAFE_files_ESCAPE_THESE, CHUNK_SIZE, (files, i, a) => {
-        Logger.log(`\t\tImporting chunk ${i}/${a.length}`);
+        Logger.log(chalk.gray(`\t\tImporting chunk ${i}/${a.length}`));
         return importPhotosToAlbum(album_name, files, what_if);
     });
 }
