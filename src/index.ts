@@ -506,7 +506,8 @@ async function main() {
 
         if (images_file) {
             Logger.log(chalk.gray("Found images file..."));
-            const joinedText = `[${fs.readFileSync(path.join(run.name, images_file.name)).toString("utf8")}]`;
+            const readText = fs.readFileSync(path.join(run.name, images_file.name)).toString("utf8");            
+            const joinedText = `[${readText.substring(0, readText.length - 1)}]`; // strip out the last comma.
             const parsed_images: ImportedImage[] = JSON.parse(joinedText);
             parsed_images.forEach((pi) => {
                 const correspondingAlbumIndex = albums.findIndex((a) => a.existingPhotosInfo?.id === pi.albumId);
@@ -697,13 +698,15 @@ async function main() {
     
             Logger.log(`\t- Importing for ${a.title}:`);
             const newIds = importPhotosToAlbumChunked(a.title, files, WHAT_IF);
-            if (!WHAT_IF) {
-                files.forEach((f) => {
-                    Logger.log(`\t\t- ${f}`);
-                });
-            }
-
+            // if (!WHAT_IF) {
+            //     files.forEach((f) => {
+            //         Logger.log(`\t\t- ${f}`);
+            //     });
+            // }
+            Logger.log(`\t\t${newIds.length} imported.`);
+            
             const importedImageInfo = getInfoForPhotoIds(newIds);
+            Logger.log(`\t\tFetched info for ${importedImageInfo.length} from Photos.`);
             importedImageInfo.forEach((img) => {
                 const corresponding = a.content.findIndex((c) => {
                     const info = getImageInfo(c);
