@@ -4,6 +4,7 @@ import os from "os";
 import crypto from "crypto";
 import { distance } from "./numbers";
 import { execAsync } from "./exec";
+import Logger from "./logger";
 import { getPhotosAlbums, findPhotoInPhotos, findOrCreateAlbum, addPhotosToAlbumIfMissing, getAlbumPhotosCount, getInfoForPhotoIds, importPhotosToAlbumChunked } from "./photos_app";
 
 
@@ -36,7 +37,7 @@ async function getExifToolData(path: string): Promise<ExifToolOutput> {
     const PRECISION = 6;
     const result = await execAsync(`exiftool -g -json -d "%s" -c "%+.${PRECISION}f" "${path}"`);
     const json = JSON.parse(result.stdout)[0];
-    // console.log(json);
+    // Logger.log(json);
     return json;
 }
 
@@ -58,7 +59,7 @@ interface FfprobeOutput {
 }
 async function getFfprobeData(path: string): Promise<FfprobeOutput> {
     const result = await execAsync(`ffprobe -print_format json -v quiet -hide_banner -show_format "${path}"`);
-    // console.log(result.stdout);
+    // Logger.log(result.stdout);
     const json = JSON.parse(result.stdout);
     return json;
 }
@@ -68,13 +69,13 @@ async function getFfprobeData(path: string): Promise<FfprobeOutput> {
 
 //     // if (exifToolData.MakerNotes && "ContentIdentifier" in exifToolData.MakerNotes)
 //     // {
-//     //     console.log(exifToolData.MakerNotes.ContentIdentifier);
+//     //     Logger.log(exifToolData.MakerNotes.ContentIdentifier);
 //     // }
 
 //     // if (exifToolData.Composite)
 //     // {
-//     //     console.log(exifToolData.Composite.GPSLatitude);
-//     //     console.log(exifToolData.Composite.GPSLongitude);
+//     //     Logger.log(exifToolData.Composite.GPSLatitude);
+//     //     Logger.log(exifToolData.Composite.GPSLongitude);
 //     // }
 
 //     return {};
@@ -187,12 +188,12 @@ async function parseLibrary(takeout_dir: string): Promise<IAlbum[]> {
     google_photos_dirs.filter((d) => {
         const doesExist = fs.existsSync(d);
         if (!doesExist) {
-            console.warn(`Ignoring ${d} (doesn't exist).`);
+            Logger.warn(`Ignoring ${d} (doesn't exist).`);
         }
         return doesExist;
     });
     
-    console.log("Reading from:", google_photos_dirs);
+    Logger.log("Reading from:", google_photos_dirs);
     
     const albumFolders = google_photos_dirs.map((d) => {
         const files = fs.readdirSync(d, { withFileTypes: true });
@@ -251,7 +252,7 @@ async function parseLibrary(takeout_dir: string): Promise<IAlbum[]> {
         
         const remaining = items.filter((i) => !images_and_movies.includes(i) && !jsons.includes(i) && (!metadataJson || i !== metadataJson));
         if (remaining.length !== 0) {
-            console.warn(`Unrecognized objects: ${remaining.map(r => r).join(",\r\n")}`);
+            Logger.warn(`Unrecognized objects: ${remaining.map(r => r).join(",\r\n")}`);
         }
 
         const parsedJsons = jsons.map((p) => {
@@ -301,11 +302,11 @@ async function parseLibrary(takeout_dir: string): Promise<IAlbum[]> {
                 // occassionally be truncated:
                 // 58535142263__8767EB8A-D857-4A0E-9C1F-17EAFC8DB4, for example.
                 if (baseName.length === 51) {
-                    // console.log(baseName, baseName.length);
+                    // Logger.log(baseName, baseName.length);
                     const noExt = path.parse(itemPath).name;
                     const ext = path.parse(itemPath).ext;
                     const smallMatch = parsedJsons.find((j) => j.metadata.title.indexOf(noExt) !== -1 && path.extname(j.metadata.title) === ext);
-                    // console.log(noExt, ext, !!smallMatch);
+                    // Logger.log(noExt, ext, !!smallMatch);
                     return smallMatch;
                 }
 
@@ -318,11 +319,11 @@ async function parseLibrary(takeout_dir: string): Promise<IAlbum[]> {
                 const extraJson = getMatchingManifest();
                 if (parsed_images[existingIndex].manifest) {
                     if (extraJson) {
-                        console.warn(`Redundant JSON found for ${title} - ${quickImageName}`);
+                        Logger.warn(`Redundant JSON found for ${title} - ${quickImageName}`);
                     }
                 } else {
                     if (!extraJson) {
-                        console.warn(`No JSON found for ${title} - ${quickImageName} (or live counterpart)`);
+                        Logger.warn(`No JSON found for ${title} - ${quickImageName} (or live counterpart)`);
                     } else {
                         parsed_images[existingIndex].manifest = extraJson;
                     }
@@ -356,13 +357,13 @@ async function parseLibrary(takeout_dir: string): Promise<IAlbum[]> {
                                 }, latLon);
                             const geoDataExifMatch = geoDataExifDist < GPS_PRECISION;
                             if (!geoDataMatch || !geoDataExifMatch) {
-                                console.warn(`Geodata mismatch: ${title} - ${quickImageName} (${json.metadata.geoDataExif.latitude}, ${json.metadata.geoDataExif.longitude} [${geoDataDist}] & ${json.metadata.geoData.latitude}, ${json.metadata.geoData.longitude} [${geoDataExifDist}] => ${latLon.lat}, ${latLon.lon})`);
+                                Logger.warn(`Geodata mismatch: ${title} - ${quickImageName} (${json.metadata.geoDataExif.latitude}, ${json.metadata.geoDataExif.longitude} [${geoDataDist}] & ${json.metadata.geoData.latitude}, ${json.metadata.geoData.longitude} [${geoDataExifDist}] => ${latLon.lat}, ${latLon.lon})`);
                             }
                         } else {
-                            console.warn(`No EXIF location data, but location metadata for ${title} - ${quickImageName}`);
+                            Logger.warn(`No EXIF location data, but location metadata for ${title} - ${quickImageName}`);
                         }
                     } else if (hasGeoData) {
-                        console.warn(`Has EXIF data but no location metadata ${title} - ${quickImageName}`);
+                        Logger.warn(`Has EXIF data but no location metadata ${title} - ${quickImageName}`);
                     }
                 }
 
@@ -417,16 +418,16 @@ async function parseLibrary(takeout_dir: string): Promise<IAlbum[]> {
     }));
 
     // Now, find IDs for all the photos in Photos!
-    console.log("Finding existing photos in Photos app (this may take a while)...");
+    Logger.log("Finding existing photos in Photos app (this may take a while)...");
     albums.forEach((a) => {
         const images_to_find = a.content.map((i) => getImageInfo(i));
         const ids = findPhotoInPhotos(images_to_find);
         const foundTotal = ids.filter((i) => !!i).length;
         const imageCount = a.content.length;
         if (foundTotal === imageCount) {
-            console.log(`Found for album ${a.title} - all ${imageCount}`);
+            Logger.log(`Found for album ${a.title} - all ${imageCount}`);
         } else {
-            console.log(`Found for album ${a.title} - ${foundTotal} / ${imageCount}`);
+            Logger.log(`Found for album ${a.title} - ${foundTotal} / ${imageCount}`);
         }
         for (let i = 0; i < ids.length; i++) {
             a.content[i].photosId = ids[i];
@@ -490,7 +491,7 @@ async function main() {
                     originalCount: count
                 };
             });
-            console.log(`Augmented with ${parsed_albums.length} albums from previous runs.`);
+            Logger.log(`Augmented with ${parsed_albums.length} albums from previous runs.`);
         }
 
         if (images_file) {
@@ -508,73 +509,73 @@ async function main() {
 
                 albums[correspondingAlbumIndex].content[correspondingPhotoIndex].photosId === pi.photosId;
             });
-            console.log(`Augmented with ${parsed_images.length} imported images from previous runs.`);
+            Logger.log(`Augmented with ${parsed_images.length} imported images from previous runs.`);
         }
     });
 
-    console.log();
+    Logger.log();
     
     albums.forEach((a) => {
-        console.log(a.title);
-        console.log(`\tin: ${a.dirs.map((p) => {
+        Logger.log(a.title);
+        Logger.log(`\tin: ${a.dirs.map((p) => {
             const gphotosIndex = p.indexOf("Google Photos");
             const trim = p.substring(0, gphotosIndex);
             return path.basename(trim);
         }).join(", ")}`);
         if (a.metadata) {
-            console.log("\t(has metadata)")
+            Logger.log("\t(has metadata)")
         }
         if (a.existingPhotosInfo) {
-            console.log(`\t=> ID: ${a.existingPhotosInfo.id}`);
+            Logger.log(`\t=> ID: ${a.existingPhotosInfo.id}`);
 
             // We don't really handle existing photos well.
             if (a.existingPhotosInfo.originalCount) {
-                console.log(`\t\tWARNING: existing photos: ${a.existingPhotosInfo.originalCount}`);
+                Logger.log(`\t\tWARNING: existing photos: ${a.existingPhotosInfo.originalCount}`);
             }
         } else {
-            console.log(`\t=> (no Photos album)`);
+            Logger.log(`\t=> (no Photos album)`);
         }
-        console.log(`\tManifests: ${a.manifests.length}`);
+        Logger.log(`\tManifests: ${a.manifests.length}`);
         const livePhotoCount = a.content.filter((c) => c.image?.livePhotoId).length;
         const notImported = a.content.filter((c) => !c.photosId).length;
         const noManifest = a.content.filter((c) => !c.manifest).length; // TODO: do something with this.
         if (noManifest) {
-            console.log(`\tActual images: ${a.content.length} (${livePhotoCount} are live) (${notImported} not imported) (no manifest: ${noManifest})`);
+            Logger.log(`\tActual images: ${a.content.length} (${livePhotoCount} are live) (${notImported} not imported) (no manifest: ${noManifest})`);
         } else {
-            console.log(`\tActual images: ${a.content.length} (${livePhotoCount} are live) (${notImported} not imported)`);
+            Logger.log(`\tActual images: ${a.content.length} (${livePhotoCount} are live) (${notImported} not imported)`);
         }
-        console.log();
+        Logger.log();
     });
 
     const all_images = albums.map(a => a.content).flat();
-    console.log(`Total images & videos: ${all_images.length}`);
+    Logger.log(`Total images & videos: ${all_images.length}`);
 
     const notImported = all_images.filter((c) => !c.photosId);
-    console.log(`Not imported: ${notImported.length}`);
+    Logger.log(`Not imported: ${notImported.length}`);
 
     const noManifest = all_images.filter((c) => !c.manifest);
-    console.log(`No manifest: ${noManifest.length}`);
+    Logger.log(`No manifest: ${noManifest.length}`);
 
     const noLocation = all_images.filter(i => i.image && !i.image.metadata.Composite.GPSLatitude);
-    console.log(`Images with no location info: ${noLocation.length}`);
+    Logger.log(`Images with no location info: ${noLocation.length}`);
 
     // Unpaired Live Photos cause problems?
     const unpairedLivePhotos = all_images.filter(i => (!i.image != !i.video) && (i.image?.livePhotoId || i.video?.livePhotoId));
-    console.log(`Unpaired live photos: ${unpairedLivePhotos.length}`);
+    Logger.log(`Unpaired live photos: ${unpairedLivePhotos.length}`);
     unpairedLivePhotos.forEach((p) => {
-        console.log(p.path);
+        Logger.log(p.path);
     });
-    console.log();
+    Logger.log();
 
     // Long names (>51 chars) like
     // `57129642196__B027A842-8129-4128-8354-E415D2100BB3.JPG` seem to confuse
     // Photos. We'll have detected them earlier, just log them here.
     // const misNamed = all_images.filter(i => i.manifest && path.parse(i.path).name !== path.parse(i.manifest.metadata.title).name);
-    // console.log(`Manifest/name mismatch: ${misNamed.length}`);
+    // Logger.log(`Manifest/name mismatch: ${misNamed.length}`);
     // misNamed.forEach((p) => {
-    //     console.log(p.path, /* path.parse(p.path).base, */ p.manifest?.metadata.title);
+    //     Logger.log(p.path, /* path.parse(p.path).base, */ p.manifest?.metadata.title);
     // });
-    // console.log();
+    // Logger.log();
 
     const dateMismatch = all_images.filter(i => {
         if (!i.manifest) { return false; }
@@ -588,11 +589,11 @@ async function main() {
         const timeDiff = Math.abs(googleTime - photoTime);
         return timeDiff > 2;
     });
-    console.log(`Date mismatch: ${dateMismatch.length}`);
+    Logger.log(`Date mismatch: ${dateMismatch.length}`);
     dateMismatch.forEach((p) => {
-        console.log(p.path, /* path.parse(p.path).base, */ p.manifest?.metadata.title);
+        Logger.log(p.path, /* path.parse(p.path).base, */ p.manifest?.metadata.title);
     });
-    console.log();
+    Logger.log();
 
     if (!is_reading_existing_parse) {
         // Debug
@@ -606,14 +607,14 @@ async function main() {
     // Actions
     if (DO_ACTIONS) {
 
-        console.log();
-        console.log("Actions:");
-        console.log();
+        Logger.log();
+        Logger.log("Actions:");
+        Logger.log();
         
-        console.log("- create missing albums");
+        Logger.log("- create missing albums");
         const albums_to_create = albums.filter((a) => !a.existingPhotosInfo);
         const new_ids: CreatedAlbum[] = albums_to_create.map<CreatedAlbum | undefined>((a) => {
-            console.log(`\t- ${a.title}`);
+            Logger.log(`\t- ${a.title}`);
 
             if (!WHAT_IF) {
                 const id = findOrCreateAlbum(a.title);
@@ -632,7 +633,7 @@ async function main() {
             fs.writeFileSync(path.join(run_folder, CREATED_ALBUMS_JSON), JSON.stringify(new_ids, undefined, 4));
         }
 
-        console.log("- move existing photos into albums");
+        Logger.log("- move existing photos into albums");
         albums.forEach((a) => {
             // No harm redoing this on subsequent runs.
             const ids = a.content.map((c) => c.photosId).filter((id) => !!id) as string[];
@@ -640,10 +641,10 @@ async function main() {
         });
 
         const imported_file = path.join(run_folder, IMPORTED_IMAGES_JSON);
-        console.log("- import missing photos (and add import tag)");
+        Logger.log("- import missing photos (and add import tag)");
         const renamedFilesDir = path.join(os.tmpdir(), "photos_import_renamed_images", run_id);
         fs.mkdirSync(renamedFilesDir, { recursive: true });
-        console.log(`\t(created dir for renamed photos: ${renamedFilesDir})`);
+        Logger.log(`\t(created dir for renamed photos: ${renamedFilesDir})`);
         albums.forEach((a) => {
             const nonImportedPhotos = a.content.filter((c) => !c.photosId);
             const files = nonImportedPhotos.map((c) => {
@@ -683,11 +684,11 @@ async function main() {
                 }
             }).flat();
     
-            console.log(`\t- Importing for ${a.title}:`);
+            Logger.log(`\t- Importing for ${a.title}:`);
             const newIds = importPhotosToAlbumChunked(a.title, files, WHAT_IF);
             if (!WHAT_IF) {
                 files.forEach((f) => {
-                    console.log(`\t\t- ${f}`);
+                    Logger.log(`\t\t- ${f}`);
                 });
             }
 
@@ -710,7 +711,7 @@ async function main() {
                         // We could simply have an item that *needs* a rename
                         // and doesn't get one because we are missing a
                         // manifest. Warn instead.
-                        console.log(`WARNING: Could not find image in json for imported file - ${img.filename} size: ${img.size}, timestamp: ${img.timestamp} (${img.id})`);
+                        Logger.log(`WARNING: Could not find image in json for imported file - ${img.filename} size: ${img.size}, timestamp: ${img.timestamp} (${img.id})`);
                         return;
                     } else {
                         throw new Error(`Could not find image in json for imported file - ${img.filename} size: ${img.size}, timestamp: ${img.timestamp} (${img.id})`);
@@ -718,7 +719,7 @@ async function main() {
                 }
 
                 if (a.content[corresponding].photosId) {
-                    console.log(`WARNING: Already have an ID for file - ${img.filename} size: ${img.size}, timestamp: ${img.timestamp} (${img.id})`);
+                    Logger.log(`WARNING: Already have an ID for file - ${img.filename} size: ${img.size}, timestamp: ${img.timestamp} (${img.id})`);
                     return;
                 }
 
@@ -732,20 +733,20 @@ async function main() {
             });
         });
 
-        console.log();
-        console.log("Import complete! Here's what's left (basically: files that Photos thought were duplicates; you'll need to add them to albums manually.");
-        console.log();
+        Logger.log();
+        Logger.log("Import complete! Here's what's left (basically: files that Photos thought were duplicates; you'll need to add them to albums manually.");
+        Logger.log();
 
         // Summarize import.
         albums.forEach((a) => {
             const notImported = a.content.filter((c) => !c.photosId);
 
             if (notImported.length === 0) {
-                console.log(`${a.title} => all imported.`);
+                Logger.log(`${a.title} => all imported.`);
             } else {
-                console.log(`${a.title} => missing ${notImported.length}:`);
+                Logger.log(`${a.title} => missing ${notImported.length}:`);
                 notImported.forEach((c) => {
-                    console.log(`\t- ${c.path}`);
+                    Logger.log(`\t- ${c.path}`);
                 });
             }
         });
@@ -760,12 +761,12 @@ async function main() {
     // const inspect = albums.map(a => a.content).flat().filter(i => (!i.image != !i.video) && (i.image?.livePhotoId || i.video?.livePhotoId));
     // const inspect = albums.map(a => a.content).flat().filter(i => i.image && !i.image.metadata.Composite.GPSLatitude);
     // console.dir(inspect, { depth: 5})
-    // console.log(inspect.length);
+    // Logger.log(inspect.length);
 }
 
 main();
 
-// console.log(chunk([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], 3));
+// Logger.log(chunk([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], 3));
 
 // const photos = [
 //     {
@@ -774,9 +775,9 @@ main();
 //         image_size: 433445,
 //     }
 // ];
-// console.log(photos);
-// console.log(findPhotoInPhotos(photos));
+// Logger.log(photos);
+// Logger.log(findPhotoInPhotos(photos));
 
-// console.log(getInfoForPhotoIds([
+// Logger.log(getInfoForPhotoIds([
 //     "C089130D-0123-44E3-A5C1-74F6A4D63E82/L0/001",
 // ]));

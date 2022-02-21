@@ -1,4 +1,5 @@
 import child_process from "child_process";
+import Logger from "./logger";
 
 export function getPhotosAlbums() {
     // This was originally nested, but it's really annoying to deal with nested
@@ -44,7 +45,7 @@ end tell
         throw new Error(result.stderr.toString("utf-8"));
     }
     const lines = output.split("\n").filter((l) => l.length > 1);
-    // console.log(lines);
+    // Logger.log(lines);
     const albums = lines.map((l) => {
         const pts = l.split(", ");
         return {
@@ -179,7 +180,7 @@ export function getAlbumPhotosCount(album_id: string) {
 
 export function addPhotosToAlbumIfMissing(album_name: string, photoIds: string[], what_if: boolean): number {
     if (photoIds.length === 0) {
-        console.log(`\tSkipping ${album_name} - no photos to add.`);
+        Logger.log(`\tSkipping ${album_name} - no photos to add.`);
         return 0;
     }
 
@@ -204,7 +205,7 @@ export function addPhotosToAlbumIfMissing(album_name: string, photoIds: string[]
     `;
 
     if (what_if) {
-        console.log(script);
+        Logger.log(script);
         return 0;
     } else {
         const result = child_process.spawnSync("osascript", ["-", album_name], { input: script });
@@ -233,14 +234,14 @@ function chunk<T>(array: T[], chunk_size: number): T[][]
 export function importPhotosToAlbumChunked(album_name: string, UNSAFE_files_ESCAPE_THESE: string[], what_if: boolean): string[] {
     const CHUNK_SIZE = 200;
     return chunk(UNSAFE_files_ESCAPE_THESE, CHUNK_SIZE).map((files, i, a) => {
-        console.log(`\t\tImporting chunk ${i}/${a.length}`);
+        Logger.log(`\t\tImporting chunk ${i}/${a.length}`);
         return importPhotosToAlbum(album_name, files, what_if);
     }).flat();
 }
 
 export function importPhotosToAlbum(album_name: string, UNSAFE_files_ESCAPE_THESE: string[], what_if: boolean): string[] {
     if (UNSAFE_files_ESCAPE_THESE.length === 0) {
-        console.log(`\tSkipping ${album_name} - no photos to add.`);
+        Logger.log(`\tSkipping ${album_name} - no photos to add.`);
         return [];
     }
 
@@ -263,7 +264,7 @@ export function importPhotosToAlbum(album_name: string, UNSAFE_files_ESCAPE_THES
     `;
 
     if (what_if) {
-        console.log(script);
+        Logger.log(script);
         return [];
     } else {
         const result = child_process.spawnSync("osascript", ["-", album_name], { input: script });
@@ -275,11 +276,11 @@ export function importPhotosToAlbum(album_name: string, UNSAFE_files_ESCAPE_THES
             return [];
         }
         const imported = output.trim().split(",");
-        // console.log(imported);
+        // Logger.log(imported);
         const ids = imported.map((item) => {
             return item.trim().match(/^media item id (.*?) of album id/)![1];
         });
-        // console.log(ids);
+        // Logger.log(ids);
         return ids;
     }
 }
@@ -325,7 +326,7 @@ export function getInfoForPhotoIds(UNSAFE_ids_ESCAPE_THESE: string[]): { id: str
         }
         const items = output.trim().split(ITEM_DIVIDER);
         items.pop(); // Last one is blank
-        // console.log(items);
+        // Logger.log(items);
         const images = items.map((s, i) => {
             const parts = s.split(DATA_POINT_DIVIDER);
             const filename = parts[0];
