@@ -231,12 +231,17 @@ function chunk<T>(array: T[], chunk_size: number): T[][]
     return output;
 }
 
+export function chunked<T, O>(array: T[], chunk_size: number, fn: (input: T[], i: number, array: T[][]) => O[]): O[]
+{
+    return chunk(array, chunk_size).flatMap(fn);
+}
+
 export function importPhotosToAlbumChunked(album_name: string, UNSAFE_files_ESCAPE_THESE: string[], what_if: boolean): string[] {
     const CHUNK_SIZE = 200;
-    return chunk(UNSAFE_files_ESCAPE_THESE, CHUNK_SIZE).map((files, i, a) => {
+    return chunked(UNSAFE_files_ESCAPE_THESE, CHUNK_SIZE, (files, i, a) => {
         Logger.log(`\t\tImporting chunk ${i}/${a.length}`);
         return importPhotosToAlbum(album_name, files, what_if);
-    }).flat();
+    });
 }
 
 export function importPhotosToAlbum(album_name: string, UNSAFE_files_ESCAPE_THESE: string[], what_if: boolean): string[] {
