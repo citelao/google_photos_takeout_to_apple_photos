@@ -218,6 +218,26 @@ export function addPhotosToAlbumIfMissing(album_name: string, photoIds: string[]
     }
 }
 
+function chunk<T>(array: T[], chunk_size: number): T[][]
+{
+    let output: T[][] = [];
+    let laggingIndex = 0;
+    while (laggingIndex < array.length) {
+        const top = Math.min(array.length, laggingIndex + chunk_size);
+        output.push(array.slice(laggingIndex, top));
+        laggingIndex += chunk_size;
+    }
+    return output;
+}
+
+export function importPhotosToAlbumChunked(album_name: string, UNSAFE_files_ESCAPE_THESE: string[], what_if: boolean): string[] {
+    const CHUNK_SIZE = 200;
+    return chunk(UNSAFE_files_ESCAPE_THESE, CHUNK_SIZE).map((files, i, a) => {
+        console.log(`\t\tImporting chunk ${i}/${a.length}`);
+        return importPhotosToAlbum(album_name, files, what_if);
+    }).flat();
+}
+
 export function importPhotosToAlbum(album_name: string, UNSAFE_files_ESCAPE_THESE: string[], what_if: boolean): string[] {
     if (UNSAFE_files_ESCAPE_THESE.length === 0) {
         console.log(`\tSkipping ${album_name} - no photos to add.`);
