@@ -6,6 +6,7 @@ import { distance } from "./numbers";
 import { execAsync } from "./exec";
 import Logger from "./logger";
 import { getPhotosAlbums, findPhotoInPhotos, findOrCreateAlbum, addPhotosToAlbumIfMissing, getAlbumPhotosCount, getInfoForPhotoIds, importPhotosToAlbumChunked, chunked } from "./photos_app";
+import chalk from "chalk";
 
 
 
@@ -263,11 +264,11 @@ async function parseLibrary(takeout_dir: string): Promise<IAlbum[]> {
             }
         });
     
-        Logger.log(`${a.name} - Getting EXIF data...`);
+        Logger.log(chalk.gray(`${a.name} - Getting EXIF data...`));
         const exifs = (await Promise.all(a.dirs.map(async (d) => await getExifToolDataForDirectory(d)))).flat();
 
         // Ensure we have JSONs for each image/movie:
-        Logger.log(`${a.name} - Finding manifests...`);
+        Logger.log(chalk.gray(`${a.name} - Finding manifests...`));
         const parsed_images: ContentInfo[] = [];
         for (const itemPath of images_and_movies) {
             const quickImageName = path.basename(itemPath);
@@ -424,10 +425,10 @@ async function parseLibrary(takeout_dir: string): Promise<IAlbum[]> {
     Logger.log("Finding existing photos in Photos app (this may take a while)...");
     albums.forEach((a) => {
         const images_to_find = a.content.map((i) => getImageInfo(i));
-        Logger.log(`\t${a.title} - Finding ${images_to_find.length}...`);
+        Logger.log(chalk.grey(`\t${a.title} - Finding ${images_to_find.length}...`));
         const CHUNK_SIZE = 200;
         const ids = chunked(images_to_find, CHUNK_SIZE, (imgs, i, a) => {
-            Logger.log(`\t\tFinding ${CHUNK_SIZE} photos chunk ${i}/${a.length}...`);
+            Logger.log(chalk.gray(`\t\tFinding ${CHUNK_SIZE} photos chunk ${i}/${a.length}...`));
             return findPhotoInPhotos(imgs);
         });
         const foundTotal = ids.filter((i) => !!i).length;
