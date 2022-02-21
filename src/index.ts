@@ -4,7 +4,7 @@ import os from "os";
 import crypto from "crypto";
 import { distance } from "./numbers";
 import { execAsync } from "./exec";
-import { getPhotosAlbums, findPhotoInPhotos, findOrCreateAlbum, addPhotosToAlbumIfMissing, importPhotosToAlbum, getAlbumPhotosCount, getInfoForPhotoIds } from "./photos_app";
+import { getPhotosAlbums, findPhotoInPhotos, findOrCreateAlbum, addPhotosToAlbumIfMissing, getAlbumPhotosCount, getInfoForPhotoIds, importPhotosToAlbumChunked } from "./photos_app";
 
 
 
@@ -220,6 +220,7 @@ async function parseLibrary(takeout_dir: string): Promise<IAlbum[]> {
         const VIDEO_TYPES = [
             ".MOV",
             ".MP4", 
+            ".M4V",
         ];
         const IMAGE_TYPES = [
             ".GIF", 
@@ -250,7 +251,7 @@ async function parseLibrary(takeout_dir: string): Promise<IAlbum[]> {
         
         const remaining = items.filter((i) => !images_and_movies.includes(i) && !jsons.includes(i) && (!metadataJson || i !== metadataJson));
         if (remaining.length !== 0) {
-            console.warn(`Unrecognized objects: ${remaining.map(r => r)}`);
+            console.warn(`Unrecognized objects: ${remaining.map(r => r).join(",\r\n")}`);
         }
 
         const parsedJsons = jsons.map((p) => {
@@ -538,6 +539,10 @@ async function main() {
         fs.writeFileSync("output.json", JSON.stringify(albums, undefined, 4));
     }
 
+    const run_id = crypto.randomBytes(16).toString("hex");
+    const run_folder = `run-${run_id}`;
+    fs.mkdirSync(run_folder);
+
     // Actions
     if (DO_ACTIONS) {
 
@@ -547,26 +552,35 @@ async function main() {
         
         console.log("- create missing albums");
         const albums_to_create = albums.filter((a) => !a.existingPhotosInfo);
-        albums_to_create.forEach((a) => {
+        const new_ids = albums_to_create.map((a) => {
+            console.log(`\t- ${a.title}`);
+
             if (!WHAT_IF) {
                 const id = findOrCreateAlbum(a.title);
                 a.existingPhotosInfo = {
                     id: id,
                     originalCount: 0,
                 }
+
+                return {
+                    title: a.title,
+                    id: id,
+                };
             }
-    
-            console.log(`\t- ${a.title}`);
         });
-    
+        if (!WHAT_IF) {
+            fs.writeFileSync(path.join(run_folder, "created_albums.json"), JSON.stringify(new_ids, undefined, 4));
+        }
+
         console.log("- move existing photos into albums");
         albums.forEach((a) => {
+            // No harm redoing this on subsequent runs.
             const ids = a.content.map((c) => c.photosId).filter((id) => !!id) as string[];
             const added = addPhotosToAlbumIfMissing(a.title, ids, WHAT_IF);
         });
-    
+
+        const imported_file = path.join(run_folder, "imported_images.json");
         console.log("- import missing photos (and add import tag)");
-        const run_id = crypto.randomBytes(16).toString("hex");
         const renamedFilesDir = path.join(os.tmpdir(), "photos_import_renamed_images", run_id);
         fs.mkdirSync(renamedFilesDir, { recursive: true });
         console.log(`\t(created dir for renamed photos: ${renamedFilesDir})`);
@@ -610,7 +624,7 @@ async function main() {
             }).flat();
     
             console.log(`\t- Importing for ${a.title}:`);
-            const newIds = importPhotosToAlbum(a.title, files, WHAT_IF);
+            const newIds = importPhotosToAlbumChunked(a.title, files, WHAT_IF);
             if (!WHAT_IF) {
                 files.forEach((f) => {
                     console.log(`\t\t- ${f}`);
@@ -649,6 +663,11 @@ async function main() {
                 }
 
                 a.content[corresponding].photosId = img.id;
+                const logData = {
+                    photosId: img.id,
+                    path: a.content[corresponding].path
+                };
+                fs.appendFileSync(imported_file, JSON.stringify(logData, undefined, 4) + ",");
             });
         });
 
@@ -684,6 +703,8 @@ async function main() {
 }
 
 main();
+
+// console.log(chunk([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], 3));
 
 // const photos = [
 //     {
