@@ -478,11 +478,12 @@ async function main() {
     const currentDir = fs.readdirSync(".", { withFileTypes: true });
     const previousRuns = currentDir.filter((i) => i.isDirectory() && i.name.startsWith(RUN_PREFIX));
     previousRuns.forEach((run) => {
-        const albums_file = fs.readdirSync(".", { withFileTypes: true }).find((i) => i.isFile() && i.name === CREATED_ALBUMS_JSON);
-        const images_file = fs.readdirSync(".", { withFileTypes: true }).find((i) => i.isFile() && i.name === CREATED_ALBUMS_JSON);
+        const albums_file = fs.readdirSync(run.name, { withFileTypes: true }).find((i) => i.isFile() && i.name === CREATED_ALBUMS_JSON);
+        const images_file = fs.readdirSync(run.name, { withFileTypes: true }).find((i) => i.isFile() && i.name === IMPORTED_IMAGES_JSON);
 
         if (albums_file) {
-            const parsed_albums: CreatedAlbum[] = JSON.parse(fs.readFileSync(albums_file.name).toString("utf8"));
+            Logger.log(chalk.gray("Found albums file..."));
+            const parsed_albums: CreatedAlbum[] = JSON.parse(fs.readFileSync(path.join(run.name, albums_file.name)).toString("utf8"));
             parsed_albums.forEach((pa) => {
                 const correspondingIndex = albums.findIndex((a) => a.title === pa.title);
                 if (correspondingIndex === -1) {
@@ -504,7 +505,8 @@ async function main() {
         }
 
         if (images_file) {
-            const joinedText = `[${fs.readFileSync(images_file.name).toString("utf8")}]`;
+            Logger.log(chalk.gray("Found images file..."));
+            const joinedText = `[${fs.readFileSync(path.join(run.name, images_file.name)).toString("utf8")}]`;
             const parsed_images: ImportedImage[] = JSON.parse(joinedText);
             parsed_images.forEach((pi) => {
                 const correspondingAlbumIndex = albums.findIndex((a) => a.existingPhotosInfo?.id === pi.albumId);
@@ -572,7 +574,7 @@ async function main() {
     const unpairedLivePhotos = all_images.filter(i => (!i.image != !i.video) && (i.image?.livePhotoId || i.video?.livePhotoId));
     Logger.log(`Unpaired live photos: ${unpairedLivePhotos.length}`);
     unpairedLivePhotos.forEach((p) => {
-        Logger.log(p.path);
+        Logger.log(`\t${p.path}`);
     });
     Logger.log();
 
@@ -600,7 +602,7 @@ async function main() {
     });
     Logger.log(`Date mismatch: ${dateMismatch.length}`);
     dateMismatch.forEach((p) => {
-        Logger.log(p.path, /* path.parse(p.path).base, */ p.manifest?.metadata.title);
+        Logger.log("\t", p.path, /* path.parse(p.path).base, */ p.manifest?.metadata.title);
     });
     Logger.log();
 
