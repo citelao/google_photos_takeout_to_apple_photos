@@ -452,6 +452,66 @@ async function main() {
         albums = await parseLibrary(takeout_dir);
     }
 
+    // Augment this data with stuff from previous runs:
+    const RUN_PREFIX = "run-";
+    const CREATED_ALBUMS_JSON = "created_albums.json";
+    const IMPORTED_IMAGES_JSON = "imported_images.json";
+    type CreatedAlbum = {
+        title: string,
+        id: string
+    };
+    type ImportedImage = {
+        photosId: string,
+        path: string,
+        albumId: string,
+    };
+    const currentDir = fs.readdirSync(".", { withFileTypes: true });
+    const previousRuns = currentDir.filter((i) => i.isDirectory() && i.name.startsWith(RUN_PREFIX));
+    previousRuns.forEach((run) => {
+        const albums_file = fs.readdirSync(".", { withFileTypes: true }).find((i) => i.isFile() && i.name === CREATED_ALBUMS_JSON);
+        const images_file = fs.readdirSync(".", { withFileTypes: true }).find((i) => i.isFile() && i.name === CREATED_ALBUMS_JSON);
+
+        if (albums_file) {
+            const parsed_albums: CreatedAlbum[] = JSON.parse(fs.readFileSync(albums_file.name).toString("utf8"));
+            parsed_albums.forEach((pa) => {
+                const correspondingIndex = albums.findIndex((a) => a.title === pa.title);
+                if (correspondingIndex === -1) {
+                    throw new Error(`Missing corresponding album for ${pa.title}, ${pa.id}`);
+                }
+
+                if (albums[correspondingIndex].existingPhotosInfo) {
+                    throw new Error(`Already have photos info for ${pa.title}, ${pa.id}: ${albums[correspondingIndex].existingPhotosInfo}`);
+                }
+
+                const count = getAlbumPhotosCount(pa.id)!;
+
+                albums[correspondingIndex].existingPhotosInfo = {
+                    id: pa.id,
+                    originalCount: count
+                };
+            });
+            console.log(`Augmented with ${parsed_albums.length} albums from previous runs.`);
+        }
+
+        if (images_file) {
+            const joinedText = `[${fs.readFileSync(images_file.name).toString("utf8")}]`;
+            const parsed_images: ImportedImage[] = JSON.parse(joinedText);
+            parsed_images.forEach((pi) => {
+                const correspondingAlbumIndex = albums.findIndex((a) => a.existingPhotosInfo?.id === pi.albumId);
+                if (correspondingAlbumIndex === -1) {
+                    throw new Error(`Missing corresponding album for ${pi.path}, ${pi.albumId}`);
+                }
+                const correspondingPhotoIndex = albums[correspondingAlbumIndex].content.findIndex((i) => i.path === pi.path);
+                if (correspondingPhotoIndex === -1) {
+                    throw new Error(`Missing corresponding photo for ${pi.path}, ${pi.albumId}`);
+                }
+
+                albums[correspondingAlbumIndex].content[correspondingPhotoIndex].photosId === pi.photosId;
+            });
+            console.log(`Augmented with ${parsed_images.length} imported images from previous runs.`);
+        }
+    });
+
     console.log();
     
     albums.forEach((a) => {
@@ -540,7 +600,7 @@ async function main() {
     }
 
     const run_id = crypto.randomBytes(16).toString("hex");
-    const run_folder = `run-${run_id}`;
+    const run_folder = `${RUN_PREFIX}${run_id}`;
     fs.mkdirSync(run_folder);
 
     // Actions
@@ -552,7 +612,7 @@ async function main() {
         
         console.log("- create missing albums");
         const albums_to_create = albums.filter((a) => !a.existingPhotosInfo);
-        const new_ids = albums_to_create.map((a) => {
+        const new_ids: CreatedAlbum[] = albums_to_create.map<CreatedAlbum | undefined>((a) => {
             console.log(`\t- ${a.title}`);
 
             if (!WHAT_IF) {
@@ -567,9 +627,9 @@ async function main() {
                     id: id,
                 };
             }
-        });
+        }).filter<CreatedAlbum>((v): v is CreatedAlbum => !!v);
         if (!WHAT_IF) {
-            fs.writeFileSync(path.join(run_folder, "created_albums.json"), JSON.stringify(new_ids, undefined, 4));
+            fs.writeFileSync(path.join(run_folder, CREATED_ALBUMS_JSON), JSON.stringify(new_ids, undefined, 4));
         }
 
         console.log("- move existing photos into albums");
@@ -579,7 +639,7 @@ async function main() {
             const added = addPhotosToAlbumIfMissing(a.title, ids, WHAT_IF);
         });
 
-        const imported_file = path.join(run_folder, "imported_images.json");
+        const imported_file = path.join(run_folder, IMPORTED_IMAGES_JSON);
         console.log("- import missing photos (and add import tag)");
         const renamedFilesDir = path.join(os.tmpdir(), "photos_import_renamed_images", run_id);
         fs.mkdirSync(renamedFilesDir, { recursive: true });
@@ -663,9 +723,10 @@ async function main() {
                 }
 
                 a.content[corresponding].photosId = img.id;
-                const logData = {
+                const logData: ImportedImage = {
                     photosId: img.id,
-                    path: a.content[corresponding].path
+                    path: a.content[corresponding].path,
+                    albumId: a.existingPhotosInfo?.id!
                 };
                 fs.appendFileSync(imported_file, JSON.stringify(logData, undefined, 4) + ",");
             });
