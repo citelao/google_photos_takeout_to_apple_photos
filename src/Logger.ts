@@ -5,8 +5,14 @@ export default class Logger {
     public static LOG_FILE = `log-${new Date().toISOString()}.log`;
 
     public static log(t?: unknown, ...params: unknown[]) {
+        if (!t) {
+            console.log();
+            fs.appendFileSync(this.LOG_FILE, "\n");
+            return;
+        }
+
         if (params.length > 0) {
-            console.log(t, params);
+            console.log(t, ...params);
         } else {
             console.log(t);
         }
@@ -21,8 +27,14 @@ export default class Logger {
     }
 
     public static warn(t?: unknown, ...params: unknown[]) {
+        if (!t) {
+            console.warn();
+            fs.appendFileSync(this.LOG_FILE, "\n");
+            return;
+        }
+
         if (params.length > 0) {
-            console.warn(t, params);
+            console.warn(t, ...params);
         } else {
             console.warn(t);
         }
