@@ -228,7 +228,8 @@ async function parseLibrary(takeout_dir: string): Promise<IAlbum[]> {
             ".HEIC",
             ".JPG",
             ".JPEG", 
-            ".PNG", 
+            ".PNG",
+            ".NEF"
         ];
         const KNOWN_TYPES = [
             ... VIDEO_TYPES,
