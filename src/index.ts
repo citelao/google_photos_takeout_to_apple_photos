@@ -5,7 +5,7 @@ import crypto from "crypto";
 import { distance } from "./numbers";
 import { execAsync } from "./exec";
 import Logger from "./logger";
-import { getPhotosAlbums, findPhotoInPhotos, findOrCreateAlbum, addPhotosToAlbumIfMissing, getAlbumPhotosCount, getInfoForPhotoIds, importPhotosToAlbumChunked, chunked } from "./photos_app";
+import { getPhotosAlbums, findPhotoInPhotos, findOrCreateAlbum, addPhotosToAlbumIfMissing, getAlbumPhotosCount, getInfoForPhotoIds, importPhotosToAlbumChunked, chunked, importPhotosToAlbum } from "./photos_app";
 import chalk from "chalk";
 
 
@@ -659,53 +659,52 @@ async function main() {
         Logger.log(`\t(created dir for renamed photos: ${renamedFilesDir})`);
         albums.forEach((a) => {
             const nonImportedPhotos = a.content.filter((c) => !c.photosId);
+            Logger.log(`\t- Identifying files for ${a.title}:`);
+            // Don't flatten this array! If we detect live photos, we need to
+            // ensure they aren't split when we chunk (below). Otherwise the ID
+            // will go away and that will cause a ton of problems.
             const files = nonImportedPhotos.map((c) => {
                 const desiredName = c.manifest && path.parse(c.manifest.metadata.title).name;
-                const currentName = path.parse(c.path).name;
-                const isMisnamed = c.manifest && desiredName !== currentName;
-                if (isMisnamed) {
-                    const destinationName = path.join(renamedFilesDir, c.manifest!.metadata.title);
-                    fs.copyFileSync(c.path, destinationName);
-                    if (c.image && c.video) {
-                        // Add the other thing, image or video.
-                        const isMainItemAnImage = path.extname(destinationName) === path.extname(c.image.metadata.SourceFile);
-                        const additionalPathToUse = (isMainItemAnImage) ? c.video.metadata.format.filename : c.image.metadata.SourceFile;
-                        const newExt = path.extname(additionalPathToUse);
-                        const rawPath = destinationName.substring(0, destinationName.indexOf(path.extname(destinationName)));
-                        const extraPath = rawPath + newExt;
-                        fs.copyFileSync(additionalPathToUse, extraPath);
-
-                        return [
-                            destinationName,
-                            extraPath
-                        ];
-                    } else {
-                        return [
-                            destinationName
-                        ];
-                    }
-                } else {
-                    const files = [];
-                    if (c.image) {
-                        files.push(c.image.metadata.SourceFile);
-                    }
-                    if (c.video) {
-                        files.push(c.video.metadata.format.filename);
-                    }
-                    return files;
+                const baseFiles: string[] = [];
+                if (c.image) {
+                    baseFiles.push(c.image.metadata.SourceFile);
                 }
-            }).flat();
+
+                if (c.video) {
+                    baseFiles.push(c.video.metadata.format.filename);
+                }
+
+                return baseFiles.map((file) => {
+                    const currentName = path.parse(file).name;
+                    const isMisnamed = c.manifest && desiredName !== currentName;
+                    if (isMisnamed) {
+                        Logger.log(`\t\tMisnamed ${c.path} => ${desiredName}`);
+                        const ext = path.parse(file).ext;
+                        const newFilename = `${desiredName}${ext}`;
+                        const destinationName = path.join(renamedFilesDir, newFilename);
+                        fs.copyFileSync(c.path, destinationName);
+                        return destinationName;
+                    } else {
+                        return file;
+                    }
+                });
+            });
     
             Logger.log(`\t- Importing for ${a.title}:`);
-            const newIds = importPhotosToAlbumChunked(a.title, files, WHAT_IF);
+            const IMPORT_CHUNK_SIZE = 200;
+            const newIds = chunked(files, IMPORT_CHUNK_SIZE, (inp, i, arr) => {
+                Logger.log(chalk.gray(`\t\tImporting chunk ${i+1}/${arr.length}`));
+                return importPhotosToAlbum(a.title, inp.flat(), WHAT_IF);
+            });
             // if (!WHAT_IF) {
             //     files.forEach((f) => {
             //         Logger.log(`\t\t- ${f}`);
             //     });
             // }
+            Logger.verbose(newIds);
             Logger.log(`\t\t${newIds.length} imported.`);
             
-            const importedImageInfo = getInfoForPhotoIds(newIds);
+            const importedImageInfo = getInfoForPhotoIds(newIds.map((i) => i.photoId));
             Logger.log(`\t\tFetched info for ${importedImageInfo.length} from Photos.`);
             importedImageInfo.forEach((img) => {
                 const corresponding = a.content.findIndex((c) => {

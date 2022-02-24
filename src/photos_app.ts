@@ -237,7 +237,7 @@ export function chunked<T, O>(array: T[], chunk_size: number, fn: (input: T[], i
     return chunk(array, chunk_size).flatMap(fn);
 }
 
-export function importPhotosToAlbumChunked(album_name: string, UNSAFE_files_ESCAPE_THESE: string[], what_if: boolean): string[] {
+export function importPhotosToAlbumChunked(album_name: string, UNSAFE_files_ESCAPE_THESE: string[], what_if: boolean) {
     const CHUNK_SIZE = 200;
     return chunked(UNSAFE_files_ESCAPE_THESE, CHUNK_SIZE, (files, i, a) => {
         Logger.log(chalk.gray(`\t\tImporting chunk ${i}/${a.length}`));
@@ -245,7 +245,7 @@ export function importPhotosToAlbumChunked(album_name: string, UNSAFE_files_ESCA
     });
 }
 
-export function importPhotosToAlbum(album_name: string, UNSAFE_files_ESCAPE_THESE: string[], what_if: boolean): string[] {
+export function importPhotosToAlbum(album_name: string, UNSAFE_files_ESCAPE_THESE: string[], what_if: boolean): { photoId: string; albumId: string; }[] {
     if (UNSAFE_files_ESCAPE_THESE.length === 0) {
         Logger.log(`\tSkipping ${album_name} - no photos to add.`);
         return [];
@@ -278,13 +278,18 @@ export function importPhotosToAlbum(album_name: string, UNSAFE_files_ESCAPE_THES
         if (result.stderr.length != 0) {
             throw new Error(result.stderr.toString("utf-8"));
         }
+        Logger.verbose(output);
         if (output.trim().length === 0) {
             return [];
         }
         const imported = output.trim().split(",");
         // Logger.log(imported);
         const ids = imported.map((item) => {
-            return item.trim().match(/^media item id (.*?) of album id/)![1];
+            const result = item.trim().match(/^media item id (.*?) of album id (.*)/)!;
+            return {
+                photoId: result[1],
+                albumId: result[2],
+            };
         });
         // Logger.log(ids);
         return ids;
