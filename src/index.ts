@@ -647,7 +647,7 @@ async function main() {
                 };
             }
         }).filter<CreatedAlbum>((v): v is CreatedAlbum => !!v);
-        if (!WHAT_IF) {
+        if (!WHAT_IF && new_ids.length !== 0) {
             fs.writeFileSync(path.join(run_folder, CREATED_ALBUMS_JSON), JSON.stringify(new_ids, undefined, 4));
         }
 
