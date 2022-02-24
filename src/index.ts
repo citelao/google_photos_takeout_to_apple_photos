@@ -488,17 +488,18 @@ async function main() {
             parsed_albums.forEach((pa) => {
                 const correspondingIndex = albums.findIndex((a) => a.title === pa.title);
                 if (correspondingIndex === -1) {
-                    throw new Error(`Missing corresponding album for ${pa.title}, ${pa.id}`);
+                    throw new Error(`Missing corresponding album for ${pa.title}, ${pa.id.trim()}`);
                 }
 
                 if (albums[correspondingIndex].existingPhotosInfo) {
-                    throw new Error(`Already have photos info for ${pa.title}, ${pa.id}: ${albums[correspondingIndex].existingPhotosInfo}`);
+                    throw new Error(`Already have photos info for ${pa.title}, ${pa.id.trim()}: ${albums[correspondingIndex].existingPhotosInfo}`);
                 }
 
-                const count = getAlbumPhotosCount(pa.id)!;
+                Logger.log(chalk.gray(`\t - Getting items for ${pa.title} (${pa.id.trim()})...`));
+                const count = getAlbumPhotosCount(pa.id.trim())!;
 
                 albums[correspondingIndex].existingPhotosInfo = {
-                    id: pa.id,
+                    id: pa.id.trim(),
                     originalCount: count
                 };
             });
@@ -515,9 +516,9 @@ async function main() {
             const joinedText = `[${readText.substring(0, readText.length - 1)}]`; // strip out the last comma.
             const parsed_images: ImportedImage[] = JSON.parse(joinedText);
             parsed_images.forEach((pi) => {
-                const correspondingAlbumIndex = albums.findIndex((a) => a.existingPhotosInfo?.id === pi.albumId.trim());
+                const correspondingAlbumIndex = albums.findIndex((a) => a.existingPhotosInfo?.id.trim() === pi.albumId.trim());
                 if (correspondingAlbumIndex === -1) {
-                    throw new Error(`Missing album for ${pi.path} (wanted ${pi.albumId})`);
+                    throw new Error(`Missing album for ${pi.path} (wanted ${pi.albumId.trim()})`);
                 }
                 const correspondingPhotoIndex = albums[correspondingAlbumIndex].content.findIndex((i) => i.path === pi.path);
                 if (correspondingPhotoIndex === -1) {
