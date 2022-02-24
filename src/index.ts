@@ -462,7 +462,9 @@ async function main() {
         albums = await parseLibrary(takeout_dir);
     }
 
-    // Augment this data with stuff from previous runs:
+    // Augment this data with stuff from previous runs.
+    //
+    // 2 stages: albums first, then photos.
     const RUN_PREFIX = "run-";
     const CREATED_ALBUMS_JSON = "created_albums.json";
     const IMPORTED_IMAGES_JSON = "imported_images.json";
@@ -479,7 +481,6 @@ async function main() {
     const previousRuns = currentDir.filter((i) => i.isDirectory() && i.name.startsWith(RUN_PREFIX));
     previousRuns.forEach((run) => {
         const albums_file = fs.readdirSync(run.name, { withFileTypes: true }).find((i) => i.isFile() && i.name === CREATED_ALBUMS_JSON);
-        const images_file = fs.readdirSync(run.name, { withFileTypes: true }).find((i) => i.isFile() && i.name === IMPORTED_IMAGES_JSON);
 
         if (albums_file) {
             Logger.log(chalk.gray("Found albums file..."));
@@ -503,16 +504,20 @@ async function main() {
             });
             Logger.log(`Augmented with ${parsed_albums.length} albums from previous runs.`);
         }
+    });
 
+    previousRuns.forEach((run) => {
+        const images_file = fs.readdirSync(run.name, { withFileTypes: true }).find((i) => i.isFile() && i.name === IMPORTED_IMAGES_JSON);
+        
         if (images_file) {
             Logger.log(chalk.gray("Found images file..."));
             const readText = fs.readFileSync(path.join(run.name, images_file.name)).toString("utf8");            
             const joinedText = `[${readText.substring(0, readText.length - 1)}]`; // strip out the last comma.
             const parsed_images: ImportedImage[] = JSON.parse(joinedText);
             parsed_images.forEach((pi) => {
-                const correspondingAlbumIndex = albums.findIndex((a) => a.existingPhotosInfo?.id === pi.albumId);
+                const correspondingAlbumIndex = albums.findIndex((a) => a.existingPhotosInfo?.id === pi.albumId.trim());
                 if (correspondingAlbumIndex === -1) {
-                    throw new Error(`Missing corresponding album for ${pi.path}, ${pi.albumId}`);
+                    throw new Error(`Missing album for ${pi.path} (wanted ${pi.albumId})`);
                 }
                 const correspondingPhotoIndex = albums[correspondingAlbumIndex].content.findIndex((i) => i.path === pi.path);
                 if (correspondingPhotoIndex === -1) {
@@ -691,11 +696,12 @@ async function main() {
             });
     
             Logger.log(`\t- Importing for ${a.title}:`);
-            const IMPORT_CHUNK_SIZE = 200;
-            const newIds = chunked(files, IMPORT_CHUNK_SIZE, (inp, i, arr) => {
-                Logger.log(chalk.gray(`\t\tImporting chunk ${i+1}/${arr.length}`));
-                return importPhotosToAlbum(a.title, inp.flat(), WHAT_IF);
-            });
+            // const IMPORT_CHUNK_SIZE = 200;
+            // const newIds = chunked(files, IMPORT_CHUNK_SIZE, (inp, i, arr) => {
+            //     Logger.log(chalk.gray(`\t\tImporting chunk ${i+1}/${arr.length}`));
+            //     return importPhotosToAlbum(a.title, inp.flat(), WHAT_IF);
+            // });
+            const newIds = importPhotosToAlbum(a.title, files.flat(), WHAT_IF);
             // if (!WHAT_IF) {
             //     files.forEach((f) => {
             //         Logger.log(`\t\t- ${f}`);

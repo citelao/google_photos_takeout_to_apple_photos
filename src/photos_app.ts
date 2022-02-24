@@ -147,7 +147,7 @@ export function findOrCreateAlbum(title: string) {
     if (result.stderr.length != 0) {
         throw new Error(result.stderr.toString("utf-8"));
     }
-    return output;
+    return output.trim();
 }
 
 export function getAlbumPhotosCount(album_id: string) {
