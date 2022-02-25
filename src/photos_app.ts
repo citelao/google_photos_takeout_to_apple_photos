@@ -332,6 +332,7 @@ export function getInfoForPhotoIds(UNSAFE_ids_ESCAPE_THESE: string[]): { id: str
         if (result.stderr.length != 0) {
             throw new Error(result.stderr.toString("utf-8"));
         }
+        Logger.verbose(output);
         if (output.trim().length === 0) {
             return [];
         }
