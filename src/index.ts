@@ -20,6 +20,9 @@ const WHAT_IF = false;
 interface ExifToolOutput {
     SourceFile: string;
     // ...many other things...
+    File: {
+        FileModifyDate: number | undefined;
+    }
     MakerNotes: {
         ContentIdentifier: string | undefined;
     } | undefined,
@@ -158,7 +161,7 @@ function getImageInfo(i: ContentInfo) {
     // diff if we have options that match in size but not in timestamp.
     return {
         image_filename: i.manifest?.metadata.title || path.basename(i.path),
-        image_timestamp:  i.image?.metadata.Composite.SubSecDateTimeOriginal || "", // TODO: date time for video?
+        image_timestamp:  i.image?.metadata.Composite.SubSecDateTimeOriginal, // TODO: date time for video?
 
         // Prefer image path for size, since that's what Photos uses for Live Photos.
         image_size: i.image?.size || 0, // TODO: what if no image? 
@@ -730,8 +733,9 @@ async function main() {
                 if (corresponding === -1) {
                     const size_and_timestamp_matcher = (c: ContentInfo) => {
                         const info = getImageInfo(c);
+                        // Photos seems to sue FileModifyDate if the Photo has no metadata.
                         return (info.image_size === img.size) &&
-                            (info.image_timestamp === img.timestamp);
+                            ((info.image_timestamp || c.image?.metadata.File.FileModifyDate) === img.timestamp);
                     }
                     const firstCorresponding = a.content.findIndex(size_and_timestamp_matcher);
                     const findLastIndex = <T>(arr: T[], fn: (input: T) => boolean): number => {
