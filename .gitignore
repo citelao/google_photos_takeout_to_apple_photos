@@ -3,3 +3,4 @@ output.json
 final.json
 *.log
 run-*/
+old-run-*/
