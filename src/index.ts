@@ -696,7 +696,7 @@ async function main() {
                 });
             });
     
-            Logger.log(`\t- Importing for ${a.title}:`);
+            Logger.log(`\t- Importing for ${a.title} (${files.flat().length} including dupes):`);
             // const IMPORT_CHUNK_SIZE = 200;
             // const newIds = chunked(files, IMPORT_CHUNK_SIZE, (inp, i, arr) => {
             //     Logger.log(chalk.gray(`\t\tImporting chunk ${i+1}/${arr.length}`));
@@ -714,7 +714,7 @@ async function main() {
             const importedImageInfo = getInfoForPhotoIds(newIds.map((i) => i.photoId));
             Logger.log(`\t\tFetched info for ${importedImageInfo.length} from Photos.`);
             importedImageInfo.forEach((img) => {
-                const corresponding = a.content.findIndex((c) => {
+                let corresponding = a.content.findIndex((c) => {
                     const info = getImageInfo(c);
                     // Man, these timestamps & sizes just *love* causing
                     // trouble. Ignore them for now. We eventually throw if
@@ -725,12 +725,45 @@ async function main() {
                         (info.image_size === img.size) &&
                         (info.image_timestamp === img.timestamp) */;
                 });
+
+                // Another chance to match; Photos likes to rename some photos (especially GUID files).
+                if (corresponding === -1) {
+                    const size_and_timestamp_matcher = (c: ContentInfo) => {
+                        const info = getImageInfo(c);
+                        return (info.image_size === img.size) &&
+                            (info.image_timestamp === img.timestamp);
+                    }
+                    const firstCorresponding = a.content.findIndex(size_and_timestamp_matcher);
+                    const findLastIndex = <T>(arr: T[], fn: (input: T) => boolean): number => {
+                        const index = arr.reverse().findIndex(fn);
+                        if (index === -1) {
+                            return index;
+                        }
+
+                        // If `0`, return end of array; if last item in array, return 0.
+                        return arr.length - 1 - index;
+                    };
+                    const lastCorresponding = findLastIndex(a.content, size_and_timestamp_matcher);
+
+                    if (firstCorresponding !== -1) {
+                        if (firstCorresponding === lastCorresponding) {
+                            Logger.log(`\t\t\t- Matched based on size & timestamp for ${img.filename} size: ${img.size}, timestamp: ${img.timestamp} (${img.id})`);
+                            corresponding = firstCorresponding;
+                        } else {
+                            Logger.warn(`\t\t\t- Multiple corresponding images found for ${img.filename} size: ${img.size}, timestamp: ${img.timestamp} (${img.id})... TODO.`);
+                        }
+                    }
+                }
+
                 if (corresponding === -1) {
                     const hasItemsWithNoManifest = a.content.filter((c) => !c.manifest).length !== 0;
                     if (hasItemsWithNoManifest) {
                         // We could simply have an item that *needs* a rename
                         // and doesn't get one because we are missing a
                         // manifest. Warn instead.
+                        //
+                        // TODO: we need to map the IDs; otherwise we will try
+                        // to import this file again if you run again.
                         Logger.log(`WARNING: Could not find image in json for imported file - ${img.filename} size: ${img.size}, timestamp: ${img.timestamp} (${img.id})`);
                         return;
                     } else {
