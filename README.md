@@ -2,6 +2,11 @@
 
 (yet another one)
 
+## Features
+
+* Pairs live photos
+* Tries to be robust across multiple runs
+
 ## Usage 
 
 ```

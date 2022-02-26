@@ -1,6 +1,7 @@
 node_modules/
 output.json
 final.json
+parsed.json
 *.log
 run-*/
 old-run-*/
