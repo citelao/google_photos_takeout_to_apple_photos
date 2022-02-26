@@ -15,13 +15,16 @@ program
     .argument('<takeout_path_or_preparsed_file>', 'Google Takeout directories or parsed file')
     .option('-w --whatif', 'what if?')
     .option('-d --do_actions', 'actually perform actions, not just parse')
+    .option('--dump --dump_parsed <output_file>', 'dump the parsed, augmented library to a file, even if reading from a file')
     .action(async (takeout_path_or_preparsed_file) => {
         const do_actions: boolean = program.opts().do_actions;
         const what_if: boolean = program.opts().whatif;
+        const dump_parsed: string | undefined = program.opts().dump_parsed;
         await main({
             takeout_path_or_preparsed_file: takeout_path_or_preparsed_file, 
             do_actions,
-            what_if
+            what_if,
+            dump_parsed
         });
     });
 
@@ -444,40 +447,52 @@ async function getParsedLibraryAugmentedWithPreviousRuns(takeout_path_or_prepars
     };
 }
 
-async function main({ takeout_path_or_preparsed_file, do_actions, what_if }: { takeout_path_or_preparsed_file: string; do_actions: boolean; what_if: boolean; }) {
+async function main(
+    { takeout_path_or_preparsed_file, do_actions, what_if, dump_parsed }: 
+    { 
+        takeout_path_or_preparsed_file: string; 
+        do_actions: boolean; 
+        what_if: boolean; 
+        dump_parsed: string | undefined;
+    }) {
     const { library, is_reading_existing_parse } = await getParsedLibraryAugmentedWithPreviousRuns(takeout_path_or_preparsed_file);
     const albums = library;
     Logger.log();
     
     albums.forEach((a) => {
         Logger.log(a.title);
-        Logger.log(`\tin: ${a.dirs.map((p) => {
+        Logger.log(chalk.gray(`\tin: ${a.dirs.map((p) => {
             const gphotosIndex = p.indexOf("Google Photos");
             const trim = p.substring(0, gphotosIndex);
             return path.basename(trim);
-        }).join(", ")}`);
+        }).join(", ")}`));
         if (a.metadata) {
-            Logger.log("\t(has metadata)")
+            Logger.log(chalk.gray("\t(has metadata)"));
+        } else {
+            Logger.log(chalk.red("\tNo album metadata"));
         }
         if (a.existingPhotosInfo) {
-            Logger.log(`\t=> ID: ${a.existingPhotosInfo.id}`);
+            Logger.log(chalk.gray(`\tPhotos ID: ${a.existingPhotosInfo.id}`));
 
             // We don't really handle existing photos well.
             if (a.existingPhotosInfo.originalCount) {
-                Logger.log(`\t\tWARNING: existing photos: ${a.existingPhotosInfo.originalCount}`);
+                Logger.log(`\t\tWARNING: existing photos: ${chalk.yellow(a.existingPhotosInfo.originalCount)}`);
             }
         } else {
-            Logger.log(`\t=> (no Photos album)`);
+            Logger.log(chalk.yellow(`\t(no Photos album)`));
         }
-        Logger.log(`\tManifests: ${a.manifests.length}`);
+        Logger.log(chalk.gray(`\tPhoto manifests: ${chalk.green(a.manifests.length)}`));
+
         const livePhotoCount = a.content.filter((c) => c.image?.livePhotoId).length;
+        const liveText = (livePhotoCount === 0) ? "" : ` (${chalk.green(livePhotoCount)} are live)`;
+
         const notImported = a.content.filter((c) => !c.photosId).length;
+        const importedText = (notImported === 0) ? " (all imported)" : ` (${chalk.yellow(notImported)} not imported)`;
+
         const noManifest = a.content.filter((c) => !c.manifest).length; // TODO: do something with this.
-        if (noManifest) {
-            Logger.log(`\tActual images: ${a.content.length} (${livePhotoCount} are live) (${notImported} not imported) (no manifest: ${noManifest})`);
-        } else {
-            Logger.log(`\tActual images: ${a.content.length} (${livePhotoCount} are live) (${notImported} not imported)`);
-        }
+        const manifestText = (noManifest) ? ` (no manifest: ${chalk.yellow(noManifest)})` : "";
+
+        Logger.log(chalk.gray(`\tActual images: ${chalk.green(a.content.length)} ${importedText}${manifestText}`));
         Logger.log();
     });
 
@@ -529,8 +544,12 @@ async function main({ takeout_path_or_preparsed_file, do_actions, what_if }: { t
     });
     Logger.log();
 
-    if (!is_reading_existing_parse) {
-        fs.writeFileSync("output.json", JSON.stringify(albums, undefined, 4));
+    if (!is_reading_existing_parse || dump_parsed !== undefined) {
+        const output_file = dump_parsed || "output.json";
+        if (fs.existsSync(output_file)) {
+            throw new Error(`Output file '${output_file}' exists.`)
+        }
+        fs.writeFileSync(output_file, JSON.stringify(albums, undefined, 4));
     }
     
     // Actions
