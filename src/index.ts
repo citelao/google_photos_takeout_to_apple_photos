@@ -183,7 +183,7 @@ async function parseLibrary(takeout_dir: string): Promise<ILibrary> {
             const quickImageName = path.basename(itemPath);
 
             // First, we need to see if this a live photo.
-            const isVideo = VIDEO_TYPES.includes(path.extname(itemPath));
+            const isVideo = VIDEO_TYPES.includes(path.extname(itemPath).toUpperCase());
             const metadata = (isVideo) ? await getFfprobeData(itemPath) : exifs.find((e) => e.SourceFile === itemPath);
             if (!metadata) {
                 throw new Error(`No metadata for ${title} - ${quickImageName}`);
@@ -329,6 +329,46 @@ async function parseLibrary(takeout_dir: string): Promise<ILibrary> {
             manifests: parsedJsons,
         }
     }));
+
+    // Google had a phase where all my live photos videos got transcoded into
+    // separate files. I don't want them. Let's purge 'em.
+    Logger.log("Deduping live photo movies...");
+    albums.forEach((a, i) => {
+        let filteredCount = 0;
+        albums[i].content = a.content.filter((c) => {
+            const livePhotoId = c.image?.livePhotoId || c.video?.livePhotoId;
+            const isUnpaired = !c.image || !c.video;
+            if (livePhotoId && isUnpaired) {
+                // Now, do we have a *paired* live photo that matches this livePhoto id?
+                const existingPair = albums.flatMap((a) => a.content).find((other_c, j) => {
+                    const otherPhotoId = other_c.image?.livePhotoId || other_c.video?.livePhotoId;
+                    const isOtherUnpaired = !other_c.image || !other_c.video;
+                    if (!isOtherUnpaired && otherPhotoId) {
+                        return otherPhotoId === livePhotoId;
+                    }
+
+                    return false;
+                });
+
+                if (!existingPair) {
+                    // No matched pair found. Keep this photo.
+                    return true;
+                } else {
+                    Logger.verbose(`\t\t- Filtering out ${c.path}, dupe of ${existingPair.path} (live photo ID: ${livePhotoId})`);
+                    filteredCount++;
+                    return false;
+                }
+            }
+
+            return true;
+        });
+
+        if (filteredCount) {
+            Logger.log(chalk.gray(`\t- Filtered ${chalk.yellow(filteredCount)} redundant live photo videos from ${a.title}`));
+        } else {
+            Logger.verbose(chalk.gray(`\t- Nothing to filter for ${a.title}`));
+        }
+    });
 
     // Now, find IDs for all the photos in Photos!
     Logger.log("Finding existing photos in Photos app (this may take a while)...");
