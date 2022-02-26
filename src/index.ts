@@ -435,6 +435,11 @@ async function getParsedLibraryAugmentedWithPreviousRuns(takeout_path_or_prepars
                     throw new Error(`Missing corresponding photo for ${pi.path}, ${pi.albumId}`);
                 }
 
+                if (albums[correspondingAlbumIndex].content[correspondingPhotoIndex].photosId) {
+                    throw new Error(`Already existing photo ID for album ${correspondingAlbumIndex} photo ${correspondingPhotoIndex}: (old: ${albums[correspondingAlbumIndex].content[correspondingPhotoIndex].photosId} new: ${pi.photosId})`);
+                }
+
+                Logger.verbose(`Augmenting album ${correspondingAlbumIndex} (${albums[correspondingAlbumIndex].title}) photo ${correspondingPhotoIndex} with ID: ${pi.photosId}`);
                 albums[correspondingAlbumIndex].content[correspondingPhotoIndex].photosId === pi.photosId;
             });
             Logger.log(`Augmented with ${parsed_images.length} imported images from previous runs.`);
@@ -546,7 +551,7 @@ async function main(
 
     if (!is_reading_existing_parse || dump_parsed !== undefined) {
         const output_file = dump_parsed || "output.json";
-        if (fs.existsSync(output_file)) {
+        if (fs.existsSync(output_file) && !dump_parsed) {
             throw new Error(`Output file '${output_file}' exists.`)
         }
         fs.writeFileSync(output_file, JSON.stringify(albums, undefined, 4));
