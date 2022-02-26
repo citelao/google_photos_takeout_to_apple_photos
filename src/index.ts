@@ -48,7 +48,12 @@ type ContentInfo = {
     }
 };
 
-function getImageInfo(i: ContentInfo) {
+interface IImageInfo {
+    image_filename: string;
+    image_timestamp: number | undefined;
+    image_size: number;
+}
+function getImageInfo(i: ContentInfo): IImageInfo {
     // Again:
     //
     // - the actual file name can be truncated if it's too long
@@ -653,27 +658,8 @@ async function main(
             const importedImageInfo = getInfoForPhotoIds(newIds.map((i) => i.photoId));
             Logger.log(`\t\tFetched info for ${importedImageInfo.length} from Photos.`);
             importedImageInfo.forEach((img) => {
-                let corresponding = a.content.findIndex((c) => {
-                    const info = getImageInfo(c);
-                    // Man, these timestamps & sizes just *love* causing
-                    // trouble. Ignore them for now. We eventually throw if
-                    // there are duplicatly named files.
-                    //
-                    // Also special case for videos.
-                    return (info.image_filename === img.filename || path.basename(c.video?.metadata.format.filename || "") === img.filename) /* &&
-                        (info.image_size === img.size) &&
-                        (info.image_timestamp === img.timestamp) */;
-                });
-
-                // Another chance to match; Photos likes to rename some photos (especially GUID files).
-                if (corresponding === -1) {
-                    const size_and_timestamp_matcher = (c: ContentInfo) => {
-                        const info = getImageInfo(c);
-                        // Photos seems to sue FileModifyDate if the Photo has no metadata.
-                        return (info.image_size === img.size) &&
-                            ((info.image_timestamp || c.image?.metadata.File.FileModifyDate) === img.timestamp);
-                    }
-                    const firstCorresponding = a.content.findIndex(size_and_timestamp_matcher);
+                const findUniquePhotoIndex = (match_fn: (c: ContentInfo) => boolean): number => {
+                    const firstCorresponding = a.content.findIndex(match_fn);
                     const findLastIndex = <T>(arr: T[], fn: (input: T) => boolean): number => {
                         const index = arr.slice().reverse().findIndex(fn);
                         if (index === -1) {
@@ -683,16 +669,53 @@ async function main(
                         // If `0`, return end of array; if last item in array, return 0.
                         return arr.length - 1 - index;
                     };
-                    const lastCorresponding = findLastIndex(a.content, size_and_timestamp_matcher);
+                    const lastCorresponding = findLastIndex(a.content, match_fn);
 
                     if (firstCorresponding !== -1) {
                         if (firstCorresponding === lastCorresponding) {
                             Logger.verbose(`\t\t\t- Matched based on size & timestamp for ${img.filename} size: ${img.size}, timestamp: ${img.timestamp} (${img.id}); index: ${firstCorresponding} (also ${lastCorresponding}). ${a.content[lastCorresponding].path}`);
-                            corresponding = firstCorresponding;
                         } else {
                             Logger.warn(`\t\t\t- Multiple corresponding images found for ${img.filename} size: ${img.size}, timestamp: ${img.timestamp} (${img.id})... TODO.`);
                         }
                     }
+
+                    return firstCorresponding;
+                }
+
+                const doesImageFilenameMatch = (c: ContentInfo): boolean => {
+                    const info = getImageInfo(c);
+                    return (info.image_filename === img.filename || path.basename(c.video?.metadata.format.filename || "") === img.filename);
+                }
+                const doesImageSizeMatch = (c: ContentInfo): boolean => {
+                    const info = getImageInfo(c);
+                    return (info.image_size === img.size);
+                }
+                const doesImageTimestampMatch = (c: ContentInfo): boolean => {
+                    const info = getImageInfo(c);
+                    // Photos seems to use FileModifyDate if the Photo has no metadata.
+                    return ((info.image_timestamp || c.image?.metadata.File.FileModifyDate) === img.timestamp);
+                }
+                let corresponding = findUniquePhotoIndex((c) => {
+                    // Man, these timestamps & sizes just *love* causing
+                    // trouble. Try matching filename + size + timestamp first.
+                    //
+                    // Also special case for videos.
+                    return doesImageFilenameMatch(c) &&
+                        doesImageSizeMatch(c) &&
+                        doesImageTimestampMatch(c);
+                });
+
+                // Another chance to match; Photos likes to rename some photos (especially GUID files).
+                if (corresponding === -1) {
+                    const size_and_timestamp_matcher = (c: ContentInfo) => {
+                        return doesImageSizeMatch(c) && doesImageTimestampMatch(c);
+                    }
+                    corresponding = findUniquePhotoIndex(size_and_timestamp_matcher);
+                }
+
+                // OK, one last change: naive filename match.
+                if (corresponding === -1) {
+                    corresponding = findUniquePhotoIndex((c) => doesImageFilenameMatch(c));
                 }
 
                 if (corresponding === -1) {
