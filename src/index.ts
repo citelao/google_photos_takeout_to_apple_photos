@@ -19,7 +19,7 @@ program
         const do_actions: boolean = program.opts().do_actions;
         const what_if: boolean = program.opts().whatif;
         await main({
-            takeout_dir: takeout_path_or_preparsed_file, 
+            takeout_path_or_preparsed_file: takeout_path_or_preparsed_file, 
             do_actions,
             what_if
         });
@@ -346,15 +346,23 @@ async function parseLibrary(takeout_dir: string): Promise<IAlbum[]> {
     return albums;
 }
 
-async function main({ takeout_dir, do_actions, what_if }: { takeout_dir: string; do_actions: boolean; what_if: boolean; }) {
-    const is_reading_existing_parse = path.extname(takeout_dir) === ".json";
+type ILibrary = IAlbum[];
+async function getParsedLibrary(takeout_path_or_preparsed_file: string): Promise<ILibrary>
+{
+    const is_reading_existing_parse = path.extname(takeout_path_or_preparsed_file) === ".json";
     let albums: IAlbum[];
     if (is_reading_existing_parse) {
-        const library_data = fs.readFileSync(takeout_dir);
+        const library_data = fs.readFileSync(takeout_path_or_preparsed_file);
         albums = JSON.parse(library_data.toString('utf-8')) as IAlbum[];
     } else {
-        albums = await parseLibrary(takeout_dir);
+        albums = await parseLibrary(takeout_path_or_preparsed_file);
     }
+
+    return albums;
+}
+
+async function main({ takeout_path_or_preparsed_file, do_actions, what_if }: { takeout_path_or_preparsed_file: string; do_actions: boolean; what_if: boolean; }) {
+    const albums = await getParsedLibrary(takeout_path_or_preparsed_file);
 
     // Augment this data with stuff from previous runs.
     //
