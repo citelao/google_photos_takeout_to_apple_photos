@@ -15,4 +15,7 @@ brew install exiftool
 
 npm install
 npm run go -- path/to/takeout
+
+# You can inspect media items (launch them in Photos):
+npm run inspect -- 330479A1-76F1-4FC6-8E17-4F04182628D6/L0/001
 ```
