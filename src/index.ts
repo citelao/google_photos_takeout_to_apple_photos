@@ -18,8 +18,8 @@ program
 
 program.parse();
 
-const DO_ACTIONS: boolean = program.opts().do_actions;
-const WHAT_IF: boolean = program.opts().whatif;
+const do_actions: boolean = program.opts().do_actions;
+const what_if: boolean = program.opts().whatif;
 
 type ContentInfo = {
     video?: {
@@ -517,7 +517,7 @@ async function main() {
     fs.mkdirSync(run_folder);
 
     // Actions
-    if (DO_ACTIONS) {
+    if (do_actions) {
 
         Logger.log();
         Logger.log("Actions:");
@@ -528,7 +528,7 @@ async function main() {
         const new_ids: CreatedAlbum[] = albums_to_create.map<CreatedAlbum | undefined>((a) => {
             Logger.log(`\t- ${a.title}`);
 
-            if (!WHAT_IF) {
+            if (!what_if) {
                 const id = findOrCreateAlbum(a.title);
                 a.existingPhotosInfo = {
                     id: id,
@@ -541,7 +541,7 @@ async function main() {
                 };
             }
         }).filter<CreatedAlbum>((v): v is CreatedAlbum => !!v);
-        if (!WHAT_IF && new_ids.length !== 0) {
+        if (!what_if && new_ids.length !== 0) {
             fs.writeFileSync(path.join(run_folder, CREATED_ALBUMS_JSON), JSON.stringify(new_ids, undefined, 4));
         }
 
@@ -549,7 +549,7 @@ async function main() {
         albums.forEach((a) => {
             // No harm redoing this on subsequent runs.
             const ids = a.content.map((c) => c.photosId).filter((id) => !!id) as string[];
-            const added = addPhotosToAlbumIfMissing(a.title, ids, WHAT_IF);
+            const added = addPhotosToAlbumIfMissing(a.title, ids, what_if);
         });
 
         const imported_file = path.join(run_folder, IMPORTED_IMAGES_JSON);
@@ -596,7 +596,7 @@ async function main() {
             //     Logger.log(chalk.gray(`\t\tImporting chunk ${i+1}/${arr.length}`));
             //     return importPhotosToAlbum(a.title, inp.flat(), WHAT_IF);
             // });
-            const newIds = importPhotosToAlbum(a.title, files.flat(), WHAT_IF);
+            const newIds = importPhotosToAlbum(a.title, files.flat(), what_if);
             // if (!WHAT_IF) {
             //     files.forEach((f) => {
             //         Logger.log(`\t\t- ${f}`);
