@@ -14,12 +14,18 @@ import { ImageMetadataJson, AlbumMetadataJson, parseAlbumMetadataJson, parseImag
 program
     .argument('<takeout_path_or_preparsed_file>', 'Google Takeout directories or parsed file')
     .option('-w --whatif', 'what if?')
-    .option('-d --do_actions', 'actually perform actions, not just parse');
+    .option('-d --do_actions', 'actually perform actions, not just parse')
+    .action(async (takeout_path_or_preparsed_file) => {
+        const do_actions: boolean = program.opts().do_actions;
+        const what_if: boolean = program.opts().whatif;
+        await main({
+            takeout_dir: takeout_path_or_preparsed_file, 
+            do_actions,
+            what_if
+        });
+    });
 
 program.parse();
-
-const do_actions: boolean = program.opts().do_actions;
-const what_if: boolean = program.opts().whatif;
 
 type ContentInfo = {
     video?: {
@@ -340,13 +346,7 @@ async function parseLibrary(takeout_dir: string): Promise<IAlbum[]> {
     return albums;
 }
 
-async function main() {
-    if (process.argv.length != 3) {
-        console.error(`Wrong number of arguments; try 'npm run go -- path/here/'\r\n\r\n(${process.argv})`);
-        process.exit(1);
-    }
-    
-    const takeout_dir = process.argv[2];
+async function main({ takeout_dir, do_actions, what_if }: { takeout_dir: string; do_actions: boolean; what_if: boolean; }) {
     const is_reading_existing_parse = path.extname(takeout_dir) === ".json";
     let albums: IAlbum[];
     if (is_reading_existing_parse) {
@@ -712,8 +712,6 @@ async function main() {
     // console.dir(inspect, { depth: 5})
     // Logger.log(inspect.length);
 }
-
-main();
 
 // Logger.log(chunk([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], 3));
 
