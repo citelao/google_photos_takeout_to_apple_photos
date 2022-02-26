@@ -3,13 +3,13 @@ import path from "path";
 import os from "os";
 import crypto from "crypto";
 import { distance } from "./numbers";
-import { execAsync } from "./exec";
 import Logger from "./Logger";
 import { getPhotosAlbums, findPhotoInPhotos, findOrCreateAlbum, addPhotosToAlbumIfMissing, getAlbumPhotosCount, getInfoForPhotoIds, importPhotosToAlbumChunked, chunked, importPhotosToAlbum } from "./photos_app";
 import chalk from "chalk";
 
 import { program } from "commander";
 import { FfprobeOutput, ExifToolOutput, getExifToolDataForDirectory, getFfprobeData } from "./image_data";
+import { ImageMetadataJson, AlbumMetadataJson, parseAlbumMetadataJson, parseImageMetadataJson } from "./google_manifests";
 
 program
     .argument('<takeout_path_or_preparsed_file>', 'Google Takeout directories or parsed file')
@@ -20,51 +20,6 @@ program.parse();
 
 const DO_ACTIONS: boolean = program.opts().do_actions;
 const WHAT_IF: boolean = program.opts().whatif;
-
-interface Timestamp {
-    timestamp: string;
-    formatted: string;
-}
-interface GeoData {
-    latitude: number;
-    longitude: number;
-    altitude: number;
-    latitudeSpan: number;
-    longitudeSpan: number;
-}
-interface MetadataJson {
-    title: string;
-    description: string;
-    access: string;
-    date: Timestamp,
-    location: string;
-    geoData: GeoData;
-}
-function parseMetadataJson(metadataJsonPath: string): MetadataJson {
-    const json = JSON.parse(fs.readFileSync(metadataJsonPath).toString('utf-8'));
-    return json as MetadataJson;
-}
-
-interface ImageMetadataJson {
-    title: string;
-    description: string;
-    imageViews: string;
-    creationTime: Timestamp;
-    photoTakenTime: Timestamp;
-    geoData: GeoData;
-    geoDataExif: GeoData;
-    url: string;
-    googlePhotosOrigin: {
-        mobileUpload: {
-            deviceType: "IOS_PHONE" | string;
-        }
-    } | unknown;
-    photoLastModifiedTime: Timestamp;
-}
-function parseImageMetadataJson(jsonPath: string): ImageMetadataJson {
-    const json = JSON.parse(fs.readFileSync(jsonPath).toString('utf-8'));
-    return json as ImageMetadataJson;
-}
 
 type ContentInfo = {
     video?: {
@@ -111,7 +66,7 @@ interface IAlbum {
         id: string;
         originalCount: number;
     } | null;
-    metadata: MetadataJson | null;
+    metadata: AlbumMetadataJson | null;
     content: ContentInfo[];
     manifests: {
         path: string;
@@ -183,11 +138,11 @@ async function parseLibrary(takeout_dir: string): Promise<IAlbum[]> {
             return path.extname(i) === ".json";
         });
 
-        let metadata: MetadataJson | null = null;
+        let metadata: AlbumMetadataJson | null = null;
         const metadataJsonIndex = jsons.findIndex(i => path.basename(i) === "metadata.json");
         const metadataJson = (metadataJsonIndex === -1) ? null : jsons.splice(metadataJsonIndex, 1)[0];
         if (metadataJson) {
-            metadata = parseMetadataJson(metadataJson);
+            metadata = parseAlbumMetadataJson(metadataJson);
         }
         const title = metadata?.title || a.name;
         
