@@ -610,8 +610,7 @@ async function main(
 
     // Actions
     if (do_actions) {
-        const run_id = crypto.randomBytes(16).toString("hex");
-        const run_folder = `${RUN_PREFIX}${run_id}`;
+        const run_folder = `${RUN_PREFIX}${Logger.RUN_ID}`;
         fs.mkdirSync(run_folder);
 
         Logger.log();
@@ -649,7 +648,7 @@ async function main(
 
         const imported_file = path.join(run_folder, IMPORTED_IMAGES_JSON);
         Logger.log("- import missing photos (and add import tag)");
-        const renamedFilesDir = path.join(os.tmpdir(), "photos_import_renamed_images", run_id);
+        const renamedFilesDir = path.join(os.tmpdir(), "photos_import_renamed_images", Logger.RUN_ID);
         fs.mkdirSync(renamedFilesDir, { recursive: true });
         Logger.log(`\t(created dir for renamed photos: ${renamedFilesDir})`);
         albums.forEach((a) => {

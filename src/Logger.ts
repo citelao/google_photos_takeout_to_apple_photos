@@ -2,7 +2,8 @@ import fs from "fs";
 import stripAnsi from "strip-ansi";
 
 export default class Logger {
-    public static LOG_FILE = `log-${new Date().toISOString()}.log`;
+    public static RUN_ID = new Date().toISOString();
+    public static LOG_FILE = `log-${Logger.RUN_ID}.log`;
 
     public static log(t?: unknown, ...params: unknown[]) {
         if (!t) {
