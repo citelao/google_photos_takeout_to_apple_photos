@@ -150,6 +150,26 @@ export function findOrCreateAlbum(title: string) {
     return output.trim();
 }
 
+export function launchPhotosWithId(media_item_id: string) {
+    const NOT_FOUND = "NOT FOUND";
+    const SCRIPT = `
+        on run argv
+            tell application "Photos"
+                set media_item_id to item 1 of argv
+                set img to media item id media_item_id
+                -- properties of img
+                spotlight img
+                activate window
+            end tell
+        end run
+    `;
+    const result = child_process.spawnSync("osascript", ["-", media_item_id], { input: SCRIPT });
+    const output = result.stdout.toString("utf-8");
+    if (result.stderr.length != 0) {
+        throw new Error(result.stderr.toString("utf-8"));
+    }
+}
+
 export function getAlbumPhotosCount(album_id: string) {
     // Derived from https://github.com/akhudek/google-photos-to-apple-photos/blob/main/migrate-albums.py
     const NOT_FOUND = "NOT FOUND";
