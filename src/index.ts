@@ -688,9 +688,31 @@ async function main(
                     return firstCorresponding;
                 }
 
+                const generate_renamed_regexp = (filename: string): RegExp => {
+                    const parsed = path.parse(filename);
+                    return new RegExp(`${parsed.name}\\(\\d+\\)${parsed.ext}`);
+                }
                 const doesImageFilenameMatch = (c: ContentInfo): boolean => {
                     const info = getImageInfo(c);
-                    return (info.image_filename === img.filename || path.basename(c.video?.metadata.format.filename || "") === img.filename);
+                    const photos_filename = img.filename.toUpperCase();
+
+                    // Photos likes to rename files from `IMG_0123(1).jpg` to `IMG_0123.jpg`.
+                    const image_filename_to_test = info.image_filename.toUpperCase();
+                    const video_filename_to_test = c.video && path.basename(c.video.metadata.format.filename.toUpperCase());
+                    const does_image_filename_match = (image_filename_to_test === photos_filename);
+                    const does_video_filename_match = (video_filename_to_test && video_filename_to_test === photos_filename) || false;
+
+                    const renamed_regex = generate_renamed_regexp(photos_filename);
+                    const does_renamed_image_match = renamed_regex.test(image_filename_to_test);
+                    const does_renamed_video_match = (video_filename_to_test && renamed_regex.test(video_filename_to_test)) || false;
+                    if (does_renamed_image_match || does_renamed_video_match) {
+                        Logger.verbose(`\t\t\t\tMatched based on rename ('${image_filename_to_test}' or '${video_filename_to_test}' matches ${renamed_regex})`);
+                    }
+
+                    return does_image_filename_match ||
+                        does_video_filename_match ||
+                        does_renamed_image_match ||
+                        does_renamed_video_match;
                 }
                 const doesImageSizeMatch = (c: ContentInfo): boolean => {
                     const info = getImageInfo(c);
