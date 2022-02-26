@@ -79,7 +79,8 @@ interface IAlbum {
         metadata: ImageMetadataJson;
     }[];
 }
-async function parseLibrary(takeout_dir: string): Promise<IAlbum[]> {
+type ILibrary = IAlbum[];
+async function parseLibrary(takeout_dir: string): Promise<ILibrary> {
     const files = fs.readdirSync(takeout_dir, { withFileTypes: true });
     
     // TODO: handle someone giving the "Google Photos" directory or a directory containing Google Photos directly.
@@ -346,8 +347,7 @@ async function parseLibrary(takeout_dir: string): Promise<IAlbum[]> {
     return albums;
 }
 
-type ILibrary = IAlbum[];
-async function getParsedLibrary(takeout_path_or_preparsed_file: string): Promise<ILibrary>
+async function getParsedLibrary(takeout_path_or_preparsed_file: string): Promise<{ library: ILibrary; is_reading_existing_parse: boolean; }>
 {
     const is_reading_existing_parse = path.extname(takeout_path_or_preparsed_file) === ".json";
     let albums: IAlbum[];
@@ -358,11 +358,15 @@ async function getParsedLibrary(takeout_path_or_preparsed_file: string): Promise
         albums = await parseLibrary(takeout_path_or_preparsed_file);
     }
 
-    return albums;
+    return {
+        library: albums,
+        is_reading_existing_parse: is_reading_existing_parse,
+    };
 }
 
 async function main({ takeout_path_or_preparsed_file, do_actions, what_if }: { takeout_path_or_preparsed_file: string; do_actions: boolean; what_if: boolean; }) {
-    const albums = await getParsedLibrary(takeout_path_or_preparsed_file);
+    const { library, is_reading_existing_parse } = await getParsedLibrary(takeout_path_or_preparsed_file);
+    const albums = library;
 
     // Augment this data with stuff from previous runs.
     //
