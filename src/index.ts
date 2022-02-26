@@ -364,25 +364,26 @@ async function getParsedLibrary(takeout_path_or_preparsed_file: string): Promise
     };
 }
 
-async function main({ takeout_path_or_preparsed_file, do_actions, what_if }: { takeout_path_or_preparsed_file: string; do_actions: boolean; what_if: boolean; }) {
+const RUN_PREFIX = "run-";
+const CREATED_ALBUMS_JSON = "created_albums.json";
+const IMPORTED_IMAGES_JSON = "imported_images.json";
+type CreatedAlbum = {
+    title: string,
+    id: string
+};
+type ImportedImage = {
+    photosId: string,
+    path: string,
+    albumId: string,
+};
+async function getParsedLibraryAugmentedWithPreviousRuns(takeout_path_or_preparsed_file: string): Promise<{ library: ILibrary; is_reading_existing_parse: boolean; }>
+{
     const { library, is_reading_existing_parse } = await getParsedLibrary(takeout_path_or_preparsed_file);
     const albums = library;
 
     // Augment this data with stuff from previous runs.
     //
     // 2 stages: albums first, then photos.
-    const RUN_PREFIX = "run-";
-    const CREATED_ALBUMS_JSON = "created_albums.json";
-    const IMPORTED_IMAGES_JSON = "imported_images.json";
-    type CreatedAlbum = {
-        title: string,
-        id: string
-    };
-    type ImportedImage = {
-        photosId: string,
-        path: string,
-        albumId: string,
-    };
     const currentDir = fs.readdirSync(".", { withFileTypes: true });
     const previousRuns = currentDir.filter((i) => i.isDirectory() && i.name.startsWith(RUN_PREFIX));
     previousRuns.forEach((run) => {
@@ -437,6 +438,15 @@ async function main({ takeout_path_or_preparsed_file, do_actions, what_if }: { t
         }
     });
 
+    return {
+        library: albums,
+        is_reading_existing_parse,
+    };
+}
+
+async function main({ takeout_path_or_preparsed_file, do_actions, what_if }: { takeout_path_or_preparsed_file: string; do_actions: boolean; what_if: boolean; }) {
+    const { library, is_reading_existing_parse } = await getParsedLibraryAugmentedWithPreviousRuns(takeout_path_or_preparsed_file);
+    const albums = library;
     Logger.log();
     
     albums.forEach((a) => {
@@ -520,16 +530,14 @@ async function main({ takeout_path_or_preparsed_file, do_actions, what_if }: { t
     Logger.log();
 
     if (!is_reading_existing_parse) {
-        // Debug
         fs.writeFileSync("output.json", JSON.stringify(albums, undefined, 4));
     }
-
-    const run_id = crypto.randomBytes(16).toString("hex");
-    const run_folder = `${RUN_PREFIX}${run_id}`;
-    fs.mkdirSync(run_folder);
-
+    
     // Actions
     if (do_actions) {
+        const run_id = crypto.randomBytes(16).toString("hex");
+        const run_folder = `${RUN_PREFIX}${run_id}`;
+        fs.mkdirSync(run_folder);
 
         Logger.log();
         Logger.log("Actions:");
