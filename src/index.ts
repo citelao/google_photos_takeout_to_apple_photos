@@ -440,7 +440,7 @@ async function getParsedLibraryAugmentedWithPreviousRuns(takeout_path_or_prepars
                 }
 
                 Logger.verbose(`Augmenting album ${correspondingAlbumIndex} (${albums[correspondingAlbumIndex].title}) photo ${correspondingPhotoIndex} with ID: ${pi.photosId}`);
-                albums[correspondingAlbumIndex].content[correspondingPhotoIndex].photosId === pi.photosId;
+                albums[correspondingAlbumIndex].content[correspondingPhotoIndex].photosId = pi.photosId;
             });
             Logger.log(`Augmented with ${parsed_images.length} imported images from previous runs.`);
         }
