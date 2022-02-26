@@ -497,7 +497,7 @@ async function main({ takeout_path_or_preparsed_file, do_actions, what_if }: { t
     const unpairedLivePhotos = all_images.filter(i => (!i.image != !i.video) && (i.image?.livePhotoId || i.video?.livePhotoId));
     Logger.log(`Unpaired live photos: ${unpairedLivePhotos.length}`);
     unpairedLivePhotos.forEach((p) => {
-        Logger.log(`\t${p.path}`);
+        Logger.verbose(`\t${p.path}`);
     });
     Logger.log();
 
@@ -525,7 +525,7 @@ async function main({ takeout_path_or_preparsed_file, do_actions, what_if }: { t
     });
     Logger.log(`Date mismatch: ${dateMismatch.length}`);
     dateMismatch.forEach((p) => {
-        Logger.log("\t", p.path, /* path.parse(p.path).base, */ p.manifest?.metadata.title);
+        Logger.verbose("\t", p.path, /* path.parse(p.path).base, */ p.manifest?.metadata.title);
     });
     Logger.log();
 
