@@ -1,6 +1,6 @@
 import chalk from "chalk";
 import child_process from "child_process";
-import Logger from "./logger";
+import Logger from "./Logger";
 
 export function getPhotosAlbums() {
     // This was originally nested, but it's really annoying to deal with nested

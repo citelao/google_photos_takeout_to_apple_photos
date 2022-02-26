@@ -1,4 +1,4 @@
-import Logger from "./logger";
+import Logger from "./Logger";
 
 export function toFixed(n: number | string, digits: number): number {
     if (typeof n === "string") {
