@@ -714,6 +714,7 @@ async function main() {
             Logger.verbose(newIds);
             Logger.log(`\t\t${newIds.length} imported.`);
             
+            Logger.log(chalk.gray(`\t\tFetching info on imported photos...`));
             const importedImageInfo = getInfoForPhotoIds(newIds.map((i) => i.photoId));
             Logger.log(`\t\tFetched info for ${importedImageInfo.length} from Photos.`);
             importedImageInfo.forEach((img) => {
@@ -739,7 +740,7 @@ async function main() {
                     }
                     const firstCorresponding = a.content.findIndex(size_and_timestamp_matcher);
                     const findLastIndex = <T>(arr: T[], fn: (input: T) => boolean): number => {
-                        const index = arr.reverse().findIndex(fn);
+                        const index = arr.slice().reverse().findIndex(fn);
                         if (index === -1) {
                             return index;
                         }
@@ -751,7 +752,7 @@ async function main() {
 
                     if (firstCorresponding !== -1) {
                         if (firstCorresponding === lastCorresponding) {
-                            Logger.log(`\t\t\t- Matched based on size & timestamp for ${img.filename} size: ${img.size}, timestamp: ${img.timestamp} (${img.id})`);
+                            Logger.verbose(`\t\t\t- Matched based on size & timestamp for ${img.filename} size: ${img.size}, timestamp: ${img.timestamp} (${img.id}); index: ${firstCorresponding} (also ${lastCorresponding}). ${a.content[lastCorresponding].path}`);
                             corresponding = firstCorresponding;
                         } else {
                             Logger.warn(`\t\t\t- Multiple corresponding images found for ${img.filename} size: ${img.size}, timestamp: ${img.timestamp} (${img.id})... TODO.`);
@@ -776,7 +777,7 @@ async function main() {
                 }
 
                 if (a.content[corresponding].photosId) {
-                    Logger.log(`WARNING: Already have an ID for file - ${img.filename} size: ${img.size}, timestamp: ${img.timestamp} (${img.id})`);
+                    Logger.log(`WARNING: Already have an ID for file - ${img.filename} size: ${img.size}, timestamp: ${img.timestamp} (old: ${a.content[corresponding].photosId}; new: ${img.id})`);
                     return;
                 }
 
