@@ -560,8 +560,14 @@ async function main(
             throw new Error(`Output file '${output_file}' exists.`)
         }
         fs.writeFileSync(output_file, JSON.stringify(albums, undefined, 4));
+        Logger.log(chalk.gray(`Output to ${chalk.green(output_file)}`));
     }
     
+    if (!do_actions) {
+        Logger.log();
+        Logger.log("Run with '-do_actions' to actually import stuff.");
+    }
+
     // Actions
     if (do_actions) {
         const run_id = crypto.randomBytes(16).toString("hex");
@@ -658,7 +664,7 @@ async function main(
             const importedImageInfo = getInfoForPhotoIds(newIds.map((i) => i.photoId));
             Logger.log(`\t\tFetched info for ${importedImageInfo.length} from Photos.`);
             importedImageInfo.forEach((img) => {
-                const findUniquePhotoIndex = (match_fn: (c: ContentInfo) => boolean): number => {
+                const findUniquePhotoIndex = (desc: string, match_fn: (c: ContentInfo) => boolean): number => {
                     const firstCorresponding = a.content.findIndex(match_fn);
                     const findLastIndex = <T>(arr: T[], fn: (input: T) => boolean): number => {
                         const index = arr.slice().reverse().findIndex(fn);
@@ -673,7 +679,7 @@ async function main(
 
                     if (firstCorresponding !== -1) {
                         if (firstCorresponding === lastCorresponding) {
-                            Logger.verbose(`\t\t\t- Matched based on size & timestamp for ${img.filename} size: ${img.size}, timestamp: ${img.timestamp} (${img.id}); index: ${firstCorresponding} (also ${lastCorresponding}). ${a.content[lastCorresponding].path}`);
+                            Logger.verbose(`\t\t\t- Matched based on ${desc} for ${img.filename} size: ${img.size}, timestamp: ${img.timestamp} (${img.id}); index: ${firstCorresponding} (also ${lastCorresponding}). ${a.content[lastCorresponding].path}`);
                         } else {
                             Logger.warn(`\t\t\t- Multiple corresponding images found for ${img.filename} size: ${img.size}, timestamp: ${img.timestamp} (${img.id})... TODO.`);
                         }
@@ -695,7 +701,7 @@ async function main(
                     // Photos seems to use FileModifyDate if the Photo has no metadata.
                     return ((info.image_timestamp || c.image?.metadata.File.FileModifyDate) === img.timestamp);
                 }
-                let corresponding = findUniquePhotoIndex((c) => {
+                let corresponding = findUniquePhotoIndex("filename, size, & timestamp", (c) => {
                     // Man, these timestamps & sizes just *love* causing
                     // trouble. Try matching filename + size + timestamp first.
                     //
@@ -710,12 +716,12 @@ async function main(
                     const size_and_timestamp_matcher = (c: ContentInfo) => {
                         return doesImageSizeMatch(c) && doesImageTimestampMatch(c);
                     }
-                    corresponding = findUniquePhotoIndex(size_and_timestamp_matcher);
+                    corresponding = findUniquePhotoIndex("size, & timestamp", size_and_timestamp_matcher);
                 }
 
-                // OK, one last change: naive filename match.
+                // OK, one last chance: naive filename match.
                 if (corresponding === -1) {
-                    corresponding = findUniquePhotoIndex((c) => doesImageFilenameMatch(c));
+                    corresponding = findUniquePhotoIndex("filename only", (c) => doesImageFilenameMatch(c));
                 }
 
                 if (corresponding === -1) {
