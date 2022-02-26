@@ -773,10 +773,9 @@ async function main(
             }
         });
 
-        // if (!is_reading_existing_parse) {
-            // Debug
-            fs.writeFileSync("final.json", JSON.stringify(albums, undefined, 4));
-        // }
+        const FINAL_FILE = "final.json";
+        fs.writeFileSync(FINAL_FILE, JSON.stringify(albums, undefined, 4));
+        Logger.log(chalk.gray(`Wrote final status to ${chalk.green(FINAL_FILE)}`));
     }
 
     // const inspect = albums.slice(0, 3);
