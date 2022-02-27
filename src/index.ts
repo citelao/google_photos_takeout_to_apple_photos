@@ -672,11 +672,11 @@ async function main(
                     const currentName = path.parse(file).name;
                     const isMisnamed = c.manifest && desiredName !== currentName;
                     if (isMisnamed) {
-                        Logger.log(`\t\tMisnamed ${c.path} => ${desiredName}`);
+                        Logger.log(`\t\tMisnamed ${file} (${currentName} => ${desiredName})`);
                         const ext = path.parse(file).ext;
                         const newFilename = `${desiredName}${ext}`;
                         const destinationName = path.join(renamedFilesDir, newFilename);
-                        fs.copyFileSync(c.path, destinationName);
+                        fs.copyFileSync(file, destinationName);
                         return destinationName;
                     } else {
                         return file;
