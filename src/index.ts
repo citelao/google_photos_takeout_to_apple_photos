@@ -251,9 +251,28 @@ async function parseLibrary(takeout_dir: string): Promise<ILibrary> {
                 return null;
             };
 
+            const livePhotoId = (isVideo)
+                ? (metadata as FfprobeOutput).format.tags["com.apple.quicktime.content.identifier"]
+                : (metadata as ExifToolOutput).MakerNotes?.ContentIdentifier;
+            const existingIndex = (livePhotoId) ? parsed_images.findIndex((c) => {
+                    if (c.image) {
+                        return c.image.livePhotoId === livePhotoId;
+                    } else {
+                        if (!c.video) {
+                            throw new Error(`Invalid parsed image: ${c}`);
+                        }
+                        return c.video!.livePhotoId === livePhotoId;
+                    }
+                }) : -1;
+
             const manifest = getMatchingManifest();
             if (!manifest) {
-                Logger.warn(`No manifest found for ${title} - ${quickImageName}`);
+                if (existingIndex !== -1 && 
+                    (parsed_images[existingIndex].image?.manifest ||  parsed_images[existingIndex].video?.manifest)) {
+                    Logger.verbose(`No manifest found for ${itemPath}, but we already have one for `);
+                } else {
+                    Logger.warn(`No manifest found for ${itemPath}`);
+                }
             }
 
             // Match GPS data
@@ -293,19 +312,6 @@ async function parseLibrary(takeout_dir: string): Promise<ILibrary> {
                 }
             }
 
-            const livePhotoId = (isVideo)
-                ? (metadata as FfprobeOutput).format.tags["com.apple.quicktime.content.identifier"]
-                : (metadata as ExifToolOutput).MakerNotes?.ContentIdentifier;
-            const existingIndex = (livePhotoId) ? parsed_images.findIndex((c) => {
-                    if (c.image) {
-                        return c.image.livePhotoId === livePhotoId;
-                    } else {
-                        if (!c.video) {
-                            throw new Error(`Invalid parsed image: ${c}`);
-                        }
-                        return c.video!.livePhotoId === livePhotoId;
-                    }
-                }) : -1;
             if (existingIndex !== -1) {
                 const alreadyHas = (isVideo && parsed_images[existingIndex].video) ||
                 (!isVideo && parsed_images[existingIndex].image);
