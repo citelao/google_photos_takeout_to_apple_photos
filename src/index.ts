@@ -15,15 +15,18 @@ program
     .argument('<takeout_path_or_preparsed_file>', 'Google Takeout directories or parsed file')
     .option('-w --whatif', 'what if?')
     .option('-d --do_actions', 'actually perform actions, not just parse')
+    .option('-a --album <album_name>', 'limit to importing a specific album')
     .option('--dump --dump_parsed <output_file>', 'dump the parsed, augmented library to a file, even if reading from a file')
     .action(async (takeout_path_or_preparsed_file) => {
-        const do_actions: boolean = program.opts().do_actions;
         const what_if: boolean = program.opts().whatif;
+        const do_actions: boolean = program.opts().do_actions;
+        const album: string | undefined = program.opts().album;
         const dump_parsed: string | undefined = program.opts().dump_parsed;
         await main({
             takeout_path_or_preparsed_file: takeout_path_or_preparsed_file, 
             do_actions,
             what_if,
+            album,
             dump_parsed
         });
     });
@@ -424,10 +427,17 @@ type ImportedImage = {
     path: string,
     albumId: string,
 };
-async function getParsedLibraryAugmentedWithPreviousRuns(takeout_path_or_preparsed_file: string): Promise<{ library: ILibrary; is_reading_existing_parse: boolean; }>
+async function getParsedLibraryAugmentedWithPreviousRuns(takeout_path_or_preparsed_file: string, album: string | undefined): Promise<{ library: ILibrary; is_reading_existing_parse: boolean; }>
 {
     const { library, is_reading_existing_parse } = await getParsedLibrary(takeout_path_or_preparsed_file);
-    const albums = library;
+
+    // TODO: this does indeed filter all processing to just this album, but this
+    // does not affect initial library read. If we want to be able to filter
+    // *parsing* to specific albums, we'll have to add something to
+    // `parseLibrary`.
+    const albums = (album)
+        ? library.filter((a) => a.title === album)
+        : library;
 
     // Augment this data with stuff from previous runs.
     //
@@ -498,14 +508,15 @@ async function getParsedLibraryAugmentedWithPreviousRuns(takeout_path_or_prepars
 }
 
 async function main(
-    { takeout_path_or_preparsed_file, do_actions, what_if, dump_parsed }: 
+    { takeout_path_or_preparsed_file, do_actions, what_if, album, dump_parsed }: 
     { 
         takeout_path_or_preparsed_file: string; 
         do_actions: boolean; 
         what_if: boolean; 
+        album: string | undefined;
         dump_parsed: string | undefined;
     }) {
-    const { library, is_reading_existing_parse } = await getParsedLibraryAugmentedWithPreviousRuns(takeout_path_or_preparsed_file);
+    const { library, is_reading_existing_parse } = await getParsedLibraryAugmentedWithPreviousRuns(takeout_path_or_preparsed_file, album);
     const albums = library;
     Logger.log();
     
