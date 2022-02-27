@@ -451,6 +451,11 @@ async function getParsedLibraryAugmentedWithPreviousRuns(takeout_path_or_prepars
             Logger.log(chalk.gray("Found albums file..."));
             const parsed_albums: CreatedAlbum[] = JSON.parse(fs.readFileSync(path.join(run.name, albums_file.name)).toString("utf8"));
             parsed_albums.forEach((pa) => {
+                if (album && pa.title != album) {
+                    Logger.verbose(`Ignoring album ${pa.title} since '-a ${album}' was passed.`);
+                    return;
+                }
+                
                 const correspondingIndex = albums.findIndex((a) => a.title === pa.title);
                 if (correspondingIndex === -1) {
                     throw new Error(`Missing corresponding album for ${pa.title}, ${pa.id.trim()}`);
@@ -483,7 +488,11 @@ async function getParsedLibraryAugmentedWithPreviousRuns(takeout_path_or_prepars
             parsed_images.forEach((pi) => {
                 const correspondingAlbumIndex = albums.findIndex((a) => a.existingPhotosInfo?.id.trim() === pi.albumId.trim());
                 if (correspondingAlbumIndex === -1) {
-                    throw new Error(`Missing album for ${pi.path} (wanted ${pi.albumId.trim()})`);
+                    if (album) {
+                        Logger.verbose(`Ignoring image for album ${pi.albumId.trim()} (img: ${pi.path}) since '-a ${album}' was passed.`);
+                    } else {
+                        throw new Error(`Missing album for ${pi.path} (wanted ${pi.albumId.trim()})`);
+                    }
                 }
                 const correspondingPhotoIndex = albums[correspondingAlbumIndex].content.findIndex((i) => i.path === pi.path);
                 if (correspondingPhotoIndex === -1) {
