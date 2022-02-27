@@ -33,30 +33,48 @@ program
 
 program.parse();
 
+type ManifestAndPath = {
+    path: string;
+    metadata: ImageMetadataJson;
+};
 type ContentInfo = {
     video?: {
+        path: string;
+        manifest?: ManifestAndPath;
         metadata: FfprobeOutput;
         livePhotoId?: string;
     };
     image?: {
+        path: string;
+        manifest?: ManifestAndPath;
         metadata: ExifToolOutput;
         livePhotoId?: string;
         size: number;
     }
     photosId?: string | null;
-    path: string;
-    manifest?: {
+    extra: Array<{
+        manifest?: ManifestAndPath;
         path: string;
-        metadata: ImageMetadataJson;
-    }
+    }>;
 };
 
 interface IImageInfo {
-    image_filename: string;
+    image_filename: string | undefined;
+    video_filename: string | undefined;
     image_timestamp: number | undefined;
+    video_timestamp: number | undefined;
     image_size: number;
 }
 function getImageInfo(i: ContentInfo): IImageInfo {
+    const image_filename = i.image && (i.image.manifest?.metadata.title || path.basename(i.image.path));
+    const video_filename = i.video && (i.video.manifest?.metadata.title || path.basename(i.video.path));
+
+    if (!image_filename && !video_filename) {
+        throw new Error(`Missing ANY filenames for ${i.photosId}`);
+    }
+
+    const video_timestamp_string = i.video?.metadata.format.tags.creation_time || i.video?.metadata.format.tags["com.apple.quicktime.content.identifier"];
+    const video_timestamp = (!!video_timestamp_string && new Date(video_timestamp_string).getTime()) || undefined;
     // Again:
     //
     // - the actual file name can be truncated if it's too long
@@ -68,12 +86,30 @@ function getImageInfo(i: ContentInfo): IImageInfo {
     // super wrong sometimes. I think we need to use an actual image
     // diff if we have options that match in size but not in timestamp.
     return {
-        image_filename: i.manifest?.metadata.title || path.basename(i.path),
-        image_timestamp:  i.image?.metadata.Composite.SubSecDateTimeOriginal, // TODO: date time for video?
+        // Image title, or image path, or video title, or video path.
+        image_filename: image_filename,
+        video_filename: video_filename,
+        image_timestamp:  i.image?.metadata.Composite.SubSecDateTimeOriginal,
+        video_timestamp: video_timestamp,
 
         // Prefer image path for size, since that's what Photos uses for Live Photos.
         image_size: i.image?.size || 0, // TODO: what if no image? 
     };
+}
+
+type PathType = "any_but_image_first" | "image" | "video";
+function getContentInfoPath(c: ContentInfo, type: PathType = "any_but_image_first") {
+    const wantsImagePath = type === "image" || type === "any_but_image_first";
+    if (wantsImagePath && c.image) {
+        return c.image.path;
+    }
+
+    const wantsVideoPath = type === "video" || type === "any_but_image_first";
+    if (wantsVideoPath && c.video) {
+        return c.video.path;
+    }
+
+    throw new Error(`Could not find path for ${c} (type: ${type})`);
 }
 
 interface IAlbum {
@@ -192,21 +228,7 @@ async function parseLibrary(takeout_dir: string): Promise<ILibrary> {
                 throw new Error(`No metadata for ${title} - ${quickImageName}`);
             }
 
-            const livePhotoId = (isVideo)
-                ? (metadata as FfprobeOutput).format.tags["com.apple.quicktime.content.identifier"]
-                : (metadata as ExifToolOutput).MakerNotes?.ContentIdentifier;
-            const existingIndex = (livePhotoId) ? parsed_images.findIndex((c) => {
-                    if (c.image) {
-                        return c.image.livePhotoId === livePhotoId;
-                    } else {
-                        if (!c.video) {
-                            throw new Error(`Invalid parsed image: ${c}`);
-                        }
-                        return c.video!.livePhotoId === livePhotoId;
-                    }
-                }) : -1;
-
-            const getMatchingManifest = () => {
+            const getMatchingManifest = (): ManifestAndPath | null => {
                 const baseName = path.basename(itemPath);
                 const exactMatch = parsedJsons.find((j) => path.parse(j.path).name === baseName);
                 if (exactMatch) {
@@ -222,95 +244,117 @@ async function parseLibrary(takeout_dir: string): Promise<ILibrary> {
                     const noExt = path.parse(itemPath).name;
                     const ext = path.parse(itemPath).ext;
                     const smallMatch = parsedJsons.find((j) => j.metadata.title.indexOf(noExt) !== -1 && path.extname(j.metadata.title) === ext);
-                    // Logger.log(noExt, ext, !!smallMatch);
-                    return smallMatch;
+                    Logger.verbose(`Using search to find truncated manifest for ${itemPath}`, noExt, ext, !!smallMatch);
+                    return smallMatch || null;
                 }
 
                 return null;
             };
 
-            if (existingIndex !== -1) {
-                // Add the info.
+            const manifest = getMatchingManifest();
+            if (!manifest) {
+                Logger.warn(`No manifest found for ${title} - ${quickImageName}`);
+            }
 
-                const extraJson = getMatchingManifest();
-                if (parsed_images[existingIndex].manifest) {
-                    if (extraJson) {
-                        Logger.warn(`Redundant JSON found for ${title} - ${quickImageName}`);
-                    }
-                } else {
-                    if (!extraJson) {
-                        Logger.warn(`No JSON found for ${title} - ${quickImageName} (or live counterpart)`);
-                    } else {
-                        parsed_images[existingIndex].manifest = extraJson;
-                    }
-                }
-
-                // Match GPS data
-                if (!isVideo)
-                {
-                    const json = parsed_images[existingIndex].manifest;
-                    const exif = metadata as ExifToolOutput;
-                    const hasMetadataGeoData = json?.metadata.geoData.latitude && json?.metadata.geoData.longitude;
-                    const hasMetadataGeoDataExif = json?.metadata.geoDataExif.latitude && json?.metadata.geoDataExif.longitude;
-                    const hasGeoData = exif.Composite.GPSLatitude && exif.Composite.GPSLongitude;
-                    if (hasMetadataGeoData || hasMetadataGeoDataExif) {
-                        if (hasGeoData) {
-                            const GPS_PRECISION = Math.pow(10, -4);
-                            const latLon = {
-                                lat: Number.parseFloat(exif.Composite.GPSLatitude!.toString()),
-                                lon: Number.parseFloat(exif.Composite.GPSLongitude!.toString())
-                            };
-                            const geoDataDist =
-                                distance({
-                                    lat: json.metadata.geoData.latitude,
-                                    lon: json.metadata.geoData.longitude
-                                }, latLon);
-                            const geoDataMatch = geoDataDist < GPS_PRECISION;
-                            const geoDataExifDist =
-                                distance({
-                                    lat: json.metadata.geoDataExif.latitude,
-                                    lon: json.metadata.geoDataExif.longitude
-                                }, latLon);
-                            const geoDataExifMatch = geoDataExifDist < GPS_PRECISION;
-                            if (!geoDataMatch || !geoDataExifMatch) {
-                                Logger.warn(`Geodata mismatch: ${title} - ${quickImageName} (${json.metadata.geoDataExif.latitude}, ${json.metadata.geoDataExif.longitude} [${geoDataDist}] & ${json.metadata.geoData.latitude}, ${json.metadata.geoData.longitude} [${geoDataExifDist}] => ${latLon.lat}, ${latLon.lon})`);
-                            }
-                        } else {
-                            Logger.warn(`No EXIF location data, but location metadata for ${title} - ${quickImageName}`);
+            // Match GPS data
+            if (manifest && !isVideo)
+            {
+                const exif = metadata as ExifToolOutput;
+                const hasMetadataGeoData = manifest.metadata.geoData.latitude && manifest.metadata.geoData.longitude;
+                const hasMetadataGeoDataExif = manifest.metadata.geoDataExif.latitude && manifest.metadata.geoDataExif.longitude;
+                const hasGeoData = exif.Composite.GPSLatitude && exif.Composite.GPSLongitude;
+                if (hasMetadataGeoData || hasMetadataGeoDataExif) {
+                    if (hasGeoData) {
+                        const GPS_PRECISION = Math.pow(10, -4);
+                        const latLon = {
+                            lat: Number.parseFloat(exif.Composite.GPSLatitude!.toString()),
+                            lon: Number.parseFloat(exif.Composite.GPSLongitude!.toString())
+                        };
+                        const geoDataDist =
+                            distance({
+                                lat: manifest.metadata.geoData.latitude,
+                                lon: manifest.metadata.geoData.longitude
+                            }, latLon);
+                        const geoDataMatch = geoDataDist < GPS_PRECISION;
+                        const geoDataExifDist =
+                            distance({
+                                lat: manifest.metadata.geoDataExif.latitude,
+                                lon: manifest.metadata.geoDataExif.longitude
+                            }, latLon);
+                        const geoDataExifMatch = geoDataExifDist < GPS_PRECISION;
+                        if (!geoDataMatch || !geoDataExifMatch) {
+                            Logger.warn(`Geodata mismatch: ${title} - ${quickImageName} (${manifest.metadata.geoDataExif.latitude}, ${manifest.metadata.geoDataExif.longitude} [${geoDataDist}] & ${manifest.metadata.geoData.latitude}, ${manifest.metadata.geoData.longitude} [${geoDataExifDist}] => ${latLon.lat}, ${latLon.lon})`);
                         }
-                    } else if (hasGeoData) {
-                        Logger.warn(`Has EXIF data but no location metadata ${title} - ${quickImageName}`);
+                    } else {
+                        Logger.warn(`No EXIF location data, but location metadata for ${title} - ${quickImageName}`);
                     }
+                } else if (hasGeoData) {
+                    Logger.warn(`Has EXIF data but no location metadata ${title} - ${quickImageName}`);
                 }
+            }
 
-                if (isVideo) {
-                    parsed_images[existingIndex].video = {
-                        livePhotoId: livePhotoId,
-                        metadata: metadata as FfprobeOutput
-                    };
+            const livePhotoId = (isVideo)
+                ? (metadata as FfprobeOutput).format.tags["com.apple.quicktime.content.identifier"]
+                : (metadata as ExifToolOutput).MakerNotes?.ContentIdentifier;
+            const existingIndex = (livePhotoId) ? parsed_images.findIndex((c) => {
+                    if (c.image) {
+                        return c.image.livePhotoId === livePhotoId;
+                    } else {
+                        if (!c.video) {
+                            throw new Error(`Invalid parsed image: ${c}`);
+                        }
+                        return c.video!.livePhotoId === livePhotoId;
+                    }
+                }) : -1;
+            if (existingIndex !== -1) {
+                const alreadyHas = (isVideo && parsed_images[existingIndex].video) ||
+                (!isVideo && parsed_images[existingIndex].image);
+                if (alreadyHas) {
+                    const existingPath = isVideo 
+                        ? parsed_images[existingIndex].video?.path
+                        : parsed_images[existingIndex].image?.path;
+                    Logger.warn(`Redundant ${isVideo ? "video" : "image"} found for ${title} - ${quickImageName} (old: ${existingPath}, new: ${itemPath})`);
+
+                    parsed_images[existingIndex].extra.push({
+                        path: itemPath,
+                        manifest: manifest || undefined,
+                    });
                 } else {
-                    parsed_images[existingIndex].image = {
-                        livePhotoId: livePhotoId,
-                        metadata: metadata as ExifToolOutput,
-                        size: fs.statSync(itemPath).size,
-                    };
+                    // Add the info to the existing image entry.
+                    if (isVideo) {
+                        parsed_images[existingIndex].video = {
+                            path: itemPath,
+                            manifest: manifest || undefined,
+                            livePhotoId: livePhotoId,
+                            metadata: metadata as FfprobeOutput
+                        };
+                    } else {
+                        parsed_images[existingIndex].image = {
+                            path: itemPath,
+                            manifest: manifest || undefined,
+                            livePhotoId: livePhotoId,
+                            metadata: metadata as ExifToolOutput,
+                            size: fs.statSync(itemPath).size,
+                        };
+                    }
                 }
             } else {
-                // Create a new one. Grab metadata.
-                const json = getMatchingManifest()!;
-
+                // Create a new image entry. Grab metadata.
                 parsed_images.push({
-                    path: itemPath,
-                    manifest: json,
                     image: (isVideo) ? undefined : {
+                        path: itemPath,
+                        manifest: manifest || undefined,
                         livePhotoId: livePhotoId,
                         metadata: metadata as ExifToolOutput,
                         size: fs.statSync(itemPath).size,
                     },
                     video: (!isVideo) ? undefined : {
+                        path: itemPath,
+                        manifest: manifest || undefined,
                         livePhotoId: livePhotoId,
                         metadata: metadata as FfprobeOutput,
-                    }
+                    },
+                    extra: [],
                 });
             }
         }
@@ -335,6 +379,9 @@ async function parseLibrary(takeout_dir: string): Promise<ILibrary> {
 
     // Google had a phase where all my live photos videos got transcoded into
     // separate files. I don't want them. Let's purge 'em.
+    //
+    // TODO: this could be unnec if we filtered by live photo ID above *across
+    // all images* rather than just within each album.
     Logger.log("Deduping live photo movies...");
     albums.forEach((a, i) => {
         let filteredCount = 0;
@@ -343,7 +390,7 @@ async function parseLibrary(takeout_dir: string): Promise<ILibrary> {
             const isUnpaired = !c.image || !c.video;
             if (livePhotoId && isUnpaired) {
                 // Now, do we have a *paired* live photo that matches this livePhoto id?
-                const existingPair = albums.flatMap((a) => a.content).find((other_c, j) => {
+                const existingPair = albums.flatMap((a) => a.content).find((other_c) => {
                     const otherPhotoId = other_c.image?.livePhotoId || other_c.video?.livePhotoId;
                     const isOtherUnpaired = !other_c.image || !other_c.video;
                     if (!isOtherUnpaired && otherPhotoId) {
@@ -357,7 +404,7 @@ async function parseLibrary(takeout_dir: string): Promise<ILibrary> {
                     // No matched pair found. Keep this photo.
                     return true;
                 } else {
-                    Logger.verbose(`\t\t- Filtering out ${c.path}, dupe of ${existingPair.path} (live photo ID: ${livePhotoId})`);
+                    Logger.verbose(`\t\t- Filtering out ${getContentInfoPath(c)}, dupe of ${getContentInfoPath(c)} (live photo ID: ${livePhotoId})`);
                     filteredCount++;
                     return false;
                 }
@@ -381,7 +428,18 @@ async function parseLibrary(takeout_dir: string): Promise<ILibrary> {
         const CHUNK_SIZE = 200;
         const ids = chunked(images_to_find, CHUNK_SIZE, (imgs, i, a) => {
             Logger.log(chalk.gray(`\t\tFinding ${CHUNK_SIZE} photos chunk ${i}/${a.length}...`));
-            return findPhotoInPhotos(imgs);
+            const mappedImgs = imgs.map((i) => {
+                if (!i.image_filename && !i.video_filename) {
+                    throw new Error(`Missing ANY filenames for (size: ${i.image_size})`);
+                }
+
+                return {
+                    image_filename: i.image_filename || i.video_filename!,
+                    image_timestamp: i.image_timestamp || i.video_timestamp,
+                    image_size: i.image_size
+                };
+            });
+            return findPhotoInPhotos(mappedImgs);
         });
         const foundTotal = ids.filter((i) => !!i).length;
         const imageCount = a.content.length;
@@ -424,7 +482,8 @@ type CreatedAlbum = {
 };
 type ImportedImage = {
     photosId: string,
-    path: string,
+    mainPath: string, // Either image path or video path if no image path is present
+    videoPath?: string,
     albumId: string,
 };
 async function getParsedLibraryAugmentedWithPreviousRuns(takeout_path_or_preparsed_file: string, album: string | undefined): Promise<{ library: ILibrary; is_reading_existing_parse: boolean; }>
@@ -489,14 +548,16 @@ async function getParsedLibraryAugmentedWithPreviousRuns(takeout_path_or_prepars
                 const correspondingAlbumIndex = albums.findIndex((a) => a.existingPhotosInfo?.id.trim() === pi.albumId.trim());
                 if (correspondingAlbumIndex === -1) {
                     if (album) {
-                        Logger.verbose(`Ignoring image for album ${pi.albumId.trim()} (img: ${pi.path}) since '-a ${album}' was passed.`);
+                        Logger.verbose(`Ignoring image for album ${pi.albumId.trim()} (img: ${pi.mainPath}) since '-a ${album}' was passed.`);
                     } else {
-                        throw new Error(`Missing album for ${pi.path} (wanted ${pi.albumId.trim()})`);
+                        throw new Error(`Missing album for ${pi.mainPath} (wanted ${pi.albumId.trim()})`);
                     }
                 }
-                const correspondingPhotoIndex = albums[correspondingAlbumIndex].content.findIndex((i) => i.path === pi.path);
+                const correspondingPhotoIndex = albums[correspondingAlbumIndex].content.findIndex((i): boolean => {
+                    return i.image?.path === pi.mainPath || i.video?.path === pi.mainPath;
+                });
                 if (correspondingPhotoIndex === -1) {
-                    throw new Error(`Missing corresponding photo for ${pi.path}, ${pi.albumId}`);
+                    throw new Error(`Missing corresponding photo for ${pi.mainPath}, ${pi.albumId}`);
                 }
 
                 if (albums[correspondingAlbumIndex].content[correspondingPhotoIndex].photosId) {
@@ -559,7 +620,7 @@ async function main(
         const notImported = a.content.filter((c) => !c.photosId).length;
         const importedText = (notImported === 0) ? " (all imported)" : ` (${chalk.yellow(notImported)} not imported)`;
 
-        const noManifest = a.content.filter((c) => !c.manifest).length; // TODO: do something with this.
+        const noManifest = a.content.filter((c) => (!c.video?.manifest && !c.image?.manifest)).length; // TODO: do something with this.
         const manifestText = (noManifest) ? ` (no manifest: ${chalk.yellow(noManifest)})` : "";
 
         Logger.log(chalk.gray(`\tActual images: ${chalk.green(a.content.length)} ${importedText}${manifestText}`));
@@ -572,7 +633,7 @@ async function main(
     const notImported = all_images.filter((c) => !c.photosId);
     Logger.log(`Not imported: ${notImported.length}`);
 
-    const noManifest = all_images.filter((c) => !c.manifest);
+    const noManifest = all_images.filter((c) => (!c.video?.manifest && !c.image?.manifest));
     Logger.log(`No manifest: ${noManifest.length}`);
 
     const noLocation = all_images.filter(i => i.image && !i.image.metadata.Composite.GPSLatitude);
@@ -581,8 +642,8 @@ async function main(
     // Unpaired Live Photos cause problems?
     const unpairedLivePhotos = all_images.filter(i => (!i.image != !i.video) && (i.image?.livePhotoId || i.video?.livePhotoId));
     Logger.log(`Unpaired live photos: ${unpairedLivePhotos.length}`);
-    unpairedLivePhotos.forEach((p) => {
-        Logger.verbose(`\t${p.path}`);
+    unpairedLivePhotos.forEach((c) => {
+        Logger.verbose(`\t${getContentInfoPath(c)}`);
     });
     Logger.log();
 
@@ -597,9 +658,10 @@ async function main(
     // Logger.log();
 
     const dateMismatch = all_images.filter(i => {
-        if (!i.manifest) { return false; }
+        // TODO: just care about image manifests for now.
+        if (!i.image?.manifest) { return false; }
 
-        const googleTime = parseInt(i.manifest.metadata.photoTakenTime.timestamp);
+        const googleTime = parseInt(i.image?.manifest.metadata.photoTakenTime.timestamp);
         const photoTime = i.image?.metadata.Composite.SubSecDateTimeOriginal;
         if (!photoTime) {
             return false;
@@ -610,7 +672,7 @@ async function main(
     });
     Logger.log(`Date mismatch: ${dateMismatch.length}`);
     dateMismatch.forEach((p) => {
-        Logger.verbose("\t", p.path, /* path.parse(p.path).base, */ p.manifest?.metadata.title);
+        Logger.verbose(`\t-${getContentInfoPath(p)}`);
     });
     Logger.log();
 
@@ -675,33 +737,43 @@ async function main(
             const nonImportedPhotos = a.content.filter((c) => !c.photosId);
             Logger.log(`\t- Identifying files for ${a.title}:`);
             // Don't flatten this array! If we detect live photos, we need to
-            // ensure they aren't split when we chunk (below). Otherwise the ID
-            // will go away and that will cause a ton of problems.
-            const files = nonImportedPhotos.map((c) => {
-                const desiredName = c.manifest && path.parse(c.manifest.metadata.title).name;
-                const baseFiles: string[] = [];
+            // ensure they aren't split if we chunk (below). Otherwise we will
+            // generate 2 import IDs, one of which will go away when the second
+            // is imported, and that will cause a ton of problems.
+            const files = nonImportedPhotos.map((c): string[] => {
+                const getProperFileNameAndRenameIfNecessary = (originalFilePath: string, desiredName: string): string => {
+                    const currentName = path.parse(originalFilePath).name;
+                    const isMisnamed = desiredName !== currentName;
+                    if (isMisnamed) {
+                        Logger.log(`\t\tMisnamed ${originalFilePath} (${currentName} => ${desiredName})`);
+                        const ext = path.parse(originalFilePath).ext;
+                        const newFilename = `${desiredName}${ext}`;
+                        const destinationName = path.join(renamedFilesDir, newFilename);
+                        fs.copyFileSync(originalFilePath, destinationName);
+                        return destinationName;
+                    } else {
+                        return originalFilePath;
+                    }
+                };
+                
+                const filesForImage: string[] = [];
+                const desiredImageName = c.image?.manifest && path.parse(c.image.manifest.metadata.title).name;
                 if (c.image) {
-                    baseFiles.push(c.image.metadata.SourceFile);
+                    if (!desiredImageName) {
+                        throw new Error(`Don't have a desired image name for ${c.image.path}`);
+                    }
+                    filesForImage.push(getProperFileNameAndRenameIfNecessary(c.image.metadata.SourceFile, desiredImageName));
                 }
 
                 if (c.video) {
-                    baseFiles.push(c.video.metadata.format.filename);
+                    const desiredVideoName = c.video.manifest && path.parse(c.video.manifest.metadata.title).name;
+                    if (!desiredVideoName && !desiredImageName) {
+                        throw new Error(`Don't have a desired video OR image name for ${c.video.path}`);
+                    }
+                    filesForImage.push(getProperFileNameAndRenameIfNecessary(c.video.metadata.format.filename, desiredVideoName || desiredImageName!));
                 }
 
-                return baseFiles.map((file) => {
-                    const currentName = path.parse(file).name;
-                    const isMisnamed = c.manifest && desiredName !== currentName;
-                    if (isMisnamed) {
-                        Logger.log(`\t\tMisnamed ${file} (${currentName} => ${desiredName})`);
-                        const ext = path.parse(file).ext;
-                        const newFilename = `${desiredName}${ext}`;
-                        const destinationName = path.join(renamedFilesDir, newFilename);
-                        fs.copyFileSync(file, destinationName);
-                        return destinationName;
-                    } else {
-                        return file;
-                    }
-                });
+                return filesForImage;
             });
     
             Logger.log(`\t- Importing for ${a.title} (${files.flat().length} including dupes):`);
@@ -738,7 +810,7 @@ async function main(
 
                     if (firstCorresponding !== -1) {
                         if (firstCorresponding === lastCorresponding) {
-                            Logger.verbose(`\t\t\t- Matched based on ${desc} for ${img.filename} size: ${img.size}, timestamp: ${img.timestamp} (${img.id}); index: ${firstCorresponding} (also ${lastCorresponding}). ${a.content[lastCorresponding].path}`);
+                            Logger.verbose(`\t\t\t- Matched based on ${desc} for ${img.filename} size: ${img.size}, timestamp: ${img.timestamp} (${img.id}); index: ${firstCorresponding} (also ${lastCorresponding}). ${getContentInfoPath(a.content[lastCorresponding])}`);
                         } else {
                             Logger.warn(`\t\t\t- Multiple corresponding images found for ${img.filename} size: ${img.size}, timestamp: ${img.timestamp} (${img.id})... TODO.`);
                         }
@@ -756,13 +828,13 @@ async function main(
                     const photos_filename = img.filename.toUpperCase();
 
                     // Photos likes to rename files from `IMG_0123(1).jpg` to `IMG_0123.jpg`.
-                    const image_filename_to_test = info.image_filename.toUpperCase();
-                    const video_filename_to_test = c.video && path.basename(c.video.metadata.format.filename.toUpperCase());
-                    const does_image_filename_match = (image_filename_to_test === photos_filename);
+                    const image_filename_to_test = info.image_filename && info.image_filename.toUpperCase();
+                    const video_filename_to_test = info.video_filename && info.video_filename.toUpperCase();
+                    const does_image_filename_match = (image_filename_to_test && image_filename_to_test === photos_filename);
                     const does_video_filename_match = (video_filename_to_test && video_filename_to_test === photos_filename) || false;
 
                     const renamed_regex = generate_renamed_regexp(photos_filename);
-                    const does_renamed_image_match = renamed_regex.test(image_filename_to_test);
+                    const does_renamed_image_match = (does_image_filename_match && renamed_regex.test(image_filename_to_test));
                     const does_renamed_video_match = (video_filename_to_test && renamed_regex.test(video_filename_to_test)) || false;
                     if (does_renamed_image_match || does_renamed_video_match) {
                         Logger.verbose(`\t\t\t\tMatched based on rename ('${image_filename_to_test}' or '${video_filename_to_test}' matches ${renamed_regex})`);
@@ -806,7 +878,7 @@ async function main(
                 }
 
                 if (corresponding === -1) {
-                    const hasItemsWithNoManifest = a.content.filter((c) => !c.manifest).length !== 0;
+                    const hasItemsWithNoManifest = a.content.filter((c) => (!c.image?.manifest && !c.video?.manifest)).length !== 0;
                     if (hasItemsWithNoManifest) {
                         // We could simply have an item that *needs* a rename
                         // and doesn't get one because we are missing a
@@ -829,7 +901,8 @@ async function main(
                 a.content[corresponding].photosId = img.id;
                 const logData: ImportedImage = {
                     photosId: img.id,
-                    path: a.content[corresponding].path,
+                    mainPath: getContentInfoPath(a.content[corresponding]),
+                    videoPath: a.content[corresponding].image && a.content[corresponding].video?.path, // Only populate if there's also an image path.
                     albumId: a.existingPhotosInfo?.id!
                 };
                 fs.appendFileSync(imported_file, JSON.stringify(logData, undefined, 4) + ",");
@@ -849,7 +922,7 @@ async function main(
             } else {
                 Logger.log(`${a.title} => missing ${notImported.length}:`);
                 notImported.forEach((c) => {
-                    Logger.log(`\t- ${c.path}`);
+                    Logger.log(`\t- ${getContentInfoPath(c)}`);
                 });
             }
         });

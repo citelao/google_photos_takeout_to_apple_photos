@@ -41,7 +41,9 @@ export interface FfprobeOutput {
     format: {
         filename: string;
         tags: {
+            "creation_time": string | undefined; // Something like `2020-02-01T23:58:45.000000Z`
             "com.apple.quicktime.content.identifier": string | undefined;
+            "com.apple.quicktime.creationdate": string | undefined; // Something like `2020-02-01T15:58:42-0800`
         }
     }
 }
