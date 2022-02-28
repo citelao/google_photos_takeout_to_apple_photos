@@ -747,9 +747,9 @@ async function main(
             // generate 2 import IDs, one of which will go away when the second
             // is imported, and that will cause a ton of problems.
             const files = nonImportedPhotos.map((c): string[] => {
-                const getProperFileNameAndRenameIfNecessary = (originalFilePath: string, desiredName: string): string => {
+                const getProperFileNameAndRenameIfNecessary = (originalFilePath: string, desiredName: string | undefined): string => {
                     const currentName = path.parse(originalFilePath).name;
-                    const isMisnamed = desiredName !== currentName;
+                    const isMisnamed = desiredName && desiredName !== currentName;
                     if (isMisnamed) {
                         Logger.log(`\t\tMisnamed ${originalFilePath} (${currentName} => ${desiredName})`);
                         const ext = path.parse(originalFilePath).ext;
@@ -765,24 +765,18 @@ async function main(
                 const filesForImage: string[] = [];
                 const desiredImageName = c.image?.manifest && path.parse(c.image.manifest.metadata.title).name;
                 if (c.image) {
-                    if (!desiredImageName) {
-                        throw new Error(`Don't have a desired image name for ${c.image.path}`);
-                    }
                     filesForImage.push(getProperFileNameAndRenameIfNecessary(c.image.metadata.SourceFile, desiredImageName));
                 }
 
                 if (c.video) {
                     const desiredVideoName = c.video.manifest && path.parse(c.video.manifest.metadata.title).name;
-                    if (!desiredVideoName && !desiredImageName) {
-                        throw new Error(`Don't have a desired video OR image name for ${c.video.path}`);
-                    }
-                    filesForImage.push(getProperFileNameAndRenameIfNecessary(c.video.metadata.format.filename, desiredVideoName || desiredImageName!));
+                    filesForImage.push(getProperFileNameAndRenameIfNecessary(c.video.metadata.format.filename, desiredVideoName || desiredImageName));
                 }
 
                 return filesForImage;
             });
     
-            Logger.log(`\t- Importing for ${a.title} (${files.flat().length} including dupes):`);
+            Logger.log(`\t- Importing for ${a.title} (${files.length} images [${files.flat().length} a+v files] including dupes):`);
             // const IMPORT_CHUNK_SIZE = 200;
             // const newIds = chunked(files, IMPORT_CHUNK_SIZE, (inp, i, arr) => {
             //     Logger.log(chalk.gray(`\t\tImporting chunk ${i+1}/${arr.length}`));
