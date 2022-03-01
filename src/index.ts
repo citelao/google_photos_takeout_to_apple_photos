@@ -61,7 +61,11 @@ type ContentInfo = {
 interface IImageInfo {
     image_filename: string | undefined;
     video_filename: string | undefined;
-    extra_filenames: Array<string>;
+    extras: Array<{
+        filename: string;
+        timestamp: number | undefined;
+        size: number | string | undefined;
+    }>;
     image_timestamp: number | undefined;
     video_timestamp: number | undefined;
     image_size: number;
@@ -75,7 +79,14 @@ function getImageInfo(i: ContentInfo): IImageInfo {
         throw new Error(`Missing ANY filenames for ${i.photosId}`);
     }
 
-    const extra_filenames = i.extra.map((f) => f.manifest?.metadata.title || path.basename(f.path));
+    const extras = i.extra.map((f) => {
+        // TODO: add timestamp and size.
+        return {
+            filename: f.manifest?.metadata.title || path.basename(f.path),
+            timestamp: undefined,
+            size: undefined,
+        }
+    });
 
     const video_timestamp_string = i.video?.metadata.format.tags.creation_time || i.video?.metadata.format.tags["com.apple.quicktime.content.identifier"];
     const video_timestamp = (!!video_timestamp_string && new Date(video_timestamp_string).getTime()) || undefined;
@@ -93,13 +104,14 @@ function getImageInfo(i: ContentInfo): IImageInfo {
         // Image title, or image path, or video title, or video path.
         image_filename: image_filename,
         video_filename: video_filename,
-        extra_filenames: extra_filenames,
         image_timestamp:  i.image?.metadata.Composite.SubSecDateTimeOriginal,
         video_timestamp: video_timestamp,
-
+        
         // Prefer image path for size, since that's what Photos uses for Live Photos.
         image_size: i.image?.size || 0, // TODO: what if no image? 
         video_size: i.video?.metadata.format.size,
+
+        extras: extras,
     };
 }
 
@@ -322,6 +334,8 @@ async function parseLibrary(takeout_dir: string): Promise<ILibrary> {
                 const alreadyHas = (isVideo && parsed_images[existingIndex].video) ||
                 (!isVideo && parsed_images[existingIndex].image);
                 if (alreadyHas) {
+                    // TODO: this treats edited photos like originals simply
+                    // based on live photo ID.
                     const existingPath = isVideo 
                         ? parsed_images[existingIndex].video?.path
                         : parsed_images[existingIndex].image?.path;
@@ -865,7 +879,7 @@ async function main(
                     // Photos likes to rename files from `IMG_0123(1).jpg` to `IMG_0123.jpg`.
                     const image_filename_to_test = info.image_filename && info.image_filename.toUpperCase();
                     const video_filename_to_test = info.video_filename && info.video_filename.toUpperCase();
-                    const extras_filenames_to_test = info.extra_filenames.map((f) => f.toUpperCase());
+                    const extras_filenames_to_test = info.extras.map((f) => f.filename.toUpperCase());
                     const does_image_filename_match = (image_filename_to_test && image_filename_to_test === photos_filename);
                     const does_video_filename_match = (video_filename_to_test && video_filename_to_test === photos_filename) || false;
                     const does_extras_filename_match = extras_filenames_to_test.includes(photos_filename);
@@ -884,13 +898,19 @@ async function main(
                         does_renamed_video_match;
                 }
                 const doesImageSizeMatch = (c: ContentInfo): boolean => {
+                    // TODO: check extras sizes. Shouldn't be necessary because
+                    // we support matching on filename only.
                     const info = getImageInfo(c);
                     return (info.image_size === img.size) || (info.video_size === img.size.toString());
                 }
                 const doesImageTimestampMatch = (c: ContentInfo): boolean => {
                     const info = getImageInfo(c);
                     // Photos seems to use FileModifyDate if the Photo has no metadata.
-                    return ((info.image_timestamp || c.image?.metadata.File.FileModifyDate) === img.timestamp);
+                    const imageTimestampMatches = ((info.image_timestamp || c.image?.metadata.File.FileModifyDate) === img.timestamp);
+                    const videoTimestampMatches = info.video_timestamp === img.timestamp;
+                    // TODO: check extras timestamps. Shouldn't be necessary
+                    // because we support matching on filename only.
+                    return imageTimestampMatches || videoTimestampMatches;
                 }
                 let corresponding = findUniquePhotoIndex("filename, size, & timestamp", (c) => {
                     // Man, these timestamps & sizes just *love* causing
