@@ -61,6 +61,7 @@ type ContentInfo = {
 interface IImageInfo {
     image_filename: string | undefined;
     video_filename: string | undefined;
+    extra_filenames: Array<string>;
     image_timestamp: number | undefined;
     video_timestamp: number | undefined;
     image_size: number;
@@ -72,6 +73,8 @@ function getImageInfo(i: ContentInfo): IImageInfo {
     if (!image_filename && !video_filename) {
         throw new Error(`Missing ANY filenames for ${i.photosId}`);
     }
+
+    const extra_filenames = i.extra.map((f) => f.manifest?.metadata.title || path.basename(f.path));
 
     const video_timestamp_string = i.video?.metadata.format.tags.creation_time || i.video?.metadata.format.tags["com.apple.quicktime.content.identifier"];
     const video_timestamp = (!!video_timestamp_string && new Date(video_timestamp_string).getTime()) || undefined;
@@ -89,6 +92,7 @@ function getImageInfo(i: ContentInfo): IImageInfo {
         // Image title, or image path, or video title, or video path.
         image_filename: image_filename,
         video_filename: video_filename,
+        extra_filenames: extra_filenames,
         image_timestamp:  i.image?.metadata.Composite.SubSecDateTimeOriginal,
         video_timestamp: video_timestamp,
 
@@ -751,7 +755,7 @@ async function main(
                     const currentName = path.parse(originalFilePath).name;
                     const isMisnamed = desiredName && desiredName !== currentName;
                     if (isMisnamed) {
-                        Logger.log(`\t\tMisnamed ${originalFilePath} (${currentName} => ${desiredName})`);
+                        Logger.log(chalk.gray(`\t\tMisnamed ${originalFilePath} (${currentName} => ${desiredName})`));
                         const ext = path.parse(originalFilePath).ext;
                         const newFilename = `${desiredName}${ext}`;
                         const destinationName = path.join(renamedFilesDir, newFilename);
@@ -769,7 +773,36 @@ async function main(
                 }
 
                 if (c.video) {
-                    const desiredVideoName = c.video.manifest && path.parse(c.video.manifest.metadata.title).name;
+                    const getDesiredVideoName = (): string | undefined => {
+                        if (c.extra.length >= 1 && desiredImageName) {
+                            // Google has a penchant for renaming old Live Photos
+                            // from:
+                            //
+                            // `IMG_0271.MP4` to
+                            // `E3C9283E-A946-439F-B1EE-4011B3F27215_3.mov`
+                            //
+                            // In fact, in this case I also have a manifest-less
+                            // `IMG_0271.MP4` that is identical to the mov.
+                            //
+                            // However, since the format is different, the Photos
+                            // app will not detect a dupe (perhaps because the name
+                            // is different, too?). So if our dupe-detection failed
+                            // (e.g. the timestamp differed, which is what happened
+                            // in this case), then we will import both again; the
+                            // image will be de-duped, but this video will be
+                            // imported. That's mildly annoying.
+                            //
+                            // To fix this, see if there's a video in extra that
+                            // matches our title.
+                            const matchedExtra = c.extra.find((v) => path.parse(v.path).name === desiredImageName);
+                            if (matchedExtra) {
+                                Logger.verbose(`Using 'extra' video ${matchedExtra.path} instead of matched video ${c.video?.path}`);
+                                return path.parse(matchedExtra.path).name;
+                            }
+                        }
+                        return c.video && c.video.manifest && path.parse(c.video.manifest.metadata.title).name;
+                    };
+                    const desiredVideoName = getDesiredVideoName();
                     filesForImage.push(getProperFileNameAndRenameIfNecessary(c.video.metadata.format.filename, desiredVideoName || desiredImageName));
                 }
 
@@ -830,8 +863,10 @@ async function main(
                     // Photos likes to rename files from `IMG_0123(1).jpg` to `IMG_0123.jpg`.
                     const image_filename_to_test = info.image_filename && info.image_filename.toUpperCase();
                     const video_filename_to_test = info.video_filename && info.video_filename.toUpperCase();
+                    const extras_filenames_to_test = info.extra_filenames.map((f) => f.toUpperCase());
                     const does_image_filename_match = (image_filename_to_test && image_filename_to_test === photos_filename);
                     const does_video_filename_match = (video_filename_to_test && video_filename_to_test === photos_filename) || false;
+                    const does_extras_filename_match = extras_filenames_to_test.includes(photos_filename);
 
                     const renamed_regex = generate_renamed_regexp(photos_filename);
                     const does_renamed_image_match = (does_image_filename_match && renamed_regex.test(image_filename_to_test));
@@ -842,6 +877,7 @@ async function main(
 
                     return does_image_filename_match ||
                         does_video_filename_match ||
+                        does_extras_filename_match ||
                         does_renamed_image_match ||
                         does_renamed_video_match;
                 }
