@@ -130,25 +130,37 @@ function getContentInfoPath(c: ContentInfo, type: PathType = "any_but_image_firs
     throw new Error(`Could not find path for ${c} (type: ${type})`);
 }
 
-const VIDEO_TYPES = [
-    ".MOV",
-    ".MP4", 
-    ".M4V",
-];
-const IMAGE_TYPES = [
-    ".GIF", 
-    ".HEIC",
-    ".JPG",
-    ".JPEG", 
-    ".PNG",
-    ".NEF"
-];
-const KNOWN_TYPES = [
-    ... VIDEO_TYPES,
-    ... IMAGE_TYPES,
-];
+function getVideoTypes(): string[] {
+    const VIDEO_TYPES = [
+        ".MOV",
+        ".MP4", 
+        ".M4V",
+    ];
+    return VIDEO_TYPES;
+}
+function getImageTypes(): string[] {
+    const IMAGE_TYPES = [
+        ".GIF", 
+        ".HEIC",
+        ".JPG",
+        ".JPEG", 
+        ".PNG",
+        ".NEF"
+    ];
+    return IMAGE_TYPES;
+}
+function getKnownTypes(): string[] {
+    const KNOWN_TYPES = [
+        ... getVideoTypes(),
+        ... getImageTypes(),
+    ];
+    return KNOWN_TYPES;
+}
+function isKnownType(filename: string): boolean {
+    return getKnownTypes().includes(path.extname(filename).toUpperCase());
+}
 function isVideo(filename: string): boolean {
-    return VIDEO_TYPES.includes(path.extname(filename).toUpperCase());
+    return getVideoTypes().includes(path.extname(filename).toUpperCase());
 }
 
 interface IAlbum {
@@ -212,9 +224,7 @@ async function parseLibrary(takeout_dir: string, album_name: string | undefined)
     };
     const getPartsForAlbum = (album_dirs: string[]): PartsForDir => {
         const items = album_dirs.map((d) => fs.readdirSync(d).map(f => path.join(d, f)) ).flat();
-        const images_and_movies = items.filter((i) => {
-            return KNOWN_TYPES.includes(path.extname(i).toUpperCase());
-        });
+        const images_and_movies = items.filter((i) => isKnownType(i));
     
         const jsons = items.filter((i) => {
             return path.extname(i) === ".json";
