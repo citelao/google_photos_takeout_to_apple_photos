@@ -130,6 +130,27 @@ function getContentInfoPath(c: ContentInfo, type: PathType = "any_but_image_firs
     throw new Error(`Could not find path for ${c} (type: ${type})`);
 }
 
+const VIDEO_TYPES = [
+    ".MOV",
+    ".MP4", 
+    ".M4V",
+];
+const IMAGE_TYPES = [
+    ".GIF", 
+    ".HEIC",
+    ".JPG",
+    ".JPEG", 
+    ".PNG",
+    ".NEF"
+];
+const KNOWN_TYPES = [
+    ... VIDEO_TYPES,
+    ... IMAGE_TYPES,
+];
+function isVideo(filename: string): boolean {
+    return VIDEO_TYPES.includes(path.extname(filename).toUpperCase());
+}
+
 interface IAlbum {
     title: string;
     dirs: string[];
@@ -182,26 +203,15 @@ async function parseLibrary(takeout_dir: string): Promise<ILibrary> {
     }, []);
 
     const photosAlbums = getPhotosAlbums();
-   
-    const albums = await Promise.all(albumFolders.map(async (a): Promise<IAlbum> => {    
-        const items = a.dirs.map((d) => fs.readdirSync(d).map(f => path.join(d, f)) ).flat();
-        const VIDEO_TYPES = [
-            ".MOV",
-            ".MP4", 
-            ".M4V",
-        ];
-        const IMAGE_TYPES = [
-            ".GIF", 
-            ".HEIC",
-            ".JPG",
-            ".JPEG", 
-            ".PNG",
-            ".NEF"
-        ];
-        const KNOWN_TYPES = [
-            ... VIDEO_TYPES,
-            ... IMAGE_TYPES,
-        ];
+
+    type PartsForDir = {
+        images_and_movies: string[],
+        albumMetadata: string | undefined,
+        manifests: string[],
+        remaining: string[]
+    };
+    const getPartsForAlbum = (album_dirs: string[]): PartsForDir => {
+        const items = album_dirs.map((d) => fs.readdirSync(d).map(f => path.join(d, f)) ).flat();
         const images_and_movies = items.filter((i) => {
             return KNOWN_TYPES.includes(path.extname(i).toUpperCase());
         });
@@ -210,20 +220,32 @@ async function parseLibrary(takeout_dir: string): Promise<ILibrary> {
             return path.extname(i) === ".json";
         });
 
-        let metadata: AlbumMetadataJson | null = null;
         const metadataJsonIndex = jsons.findIndex(i => path.basename(i) === "metadata.json");
-        const metadataJson = (metadataJsonIndex === -1) ? null : jsons.splice(metadataJsonIndex, 1)[0];
-        if (metadataJson) {
-            metadata = parseAlbumMetadataJson(metadataJson);
+        const metadataJson = (metadataJsonIndex === -1) ? undefined : jsons.splice(metadataJsonIndex, 1)[0];
+        
+        const remaining = items.filter((i) => !images_and_movies.includes(i) && !jsons.includes(i) && (!metadataJson || i !== metadataJson));
+
+        return {
+            albumMetadata: metadataJson,
+            images_and_movies: images_and_movies,
+            manifests: jsons,
+            remaining: remaining
+        };
+    }
+   
+    const albums = await Promise.all(albumFolders.map(async (a): Promise<IAlbum> => {    
+        const parts = getPartsForAlbum(a.dirs);
+        let metadata: AlbumMetadataJson | null = null;
+        if (parts.albumMetadata) {
+            metadata = parseAlbumMetadataJson(parts.albumMetadata);
         }
         const title = metadata?.title || a.name;
         
-        const remaining = items.filter((i) => !images_and_movies.includes(i) && !jsons.includes(i) && (!metadataJson || i !== metadataJson));
-        if (remaining.length !== 0) {
-            Logger.warn(`Unrecognized objects: ${remaining.map(r => r).join(",\r\n")}`);
+        if (parts.remaining.length !== 0) {
+            Logger.warn(`Unrecognized objects: ${parts.remaining.map(r => r).join(",\r\n")}`);
         }
 
-        const parsedJsons = jsons.map((p) => {
+        const parsedJsons = parts.manifests.map((p) => {
             return {
                 path: p,
                 metadata: parseImageMetadataJson(p),
@@ -236,12 +258,12 @@ async function parseLibrary(takeout_dir: string): Promise<ILibrary> {
         // Ensure we have JSONs for each image/movie:
         Logger.log(chalk.gray(`${a.name} - Finding manifests...`));
         const parsed_images: ContentInfo[] = [];
-        for (const itemPath of images_and_movies) {
+        for (const itemPath of parts.images_and_movies) {
             const quickImageName = path.basename(itemPath);
 
             // First, we need to see if this a live photo.
-            const isVideo = VIDEO_TYPES.includes(path.extname(itemPath).toUpperCase());
-            const metadata = (isVideo) ? await getFfprobeData(itemPath) : exifs.find((e) => e.SourceFile === itemPath);
+            const isItemVideo = isVideo(itemPath)
+            const metadata = (isItemVideo) ? await getFfprobeData(itemPath) : exifs.find((e) => e.SourceFile === itemPath);
             if (!metadata) {
                 throw new Error(`No metadata for ${title} - ${quickImageName}`);
             }
@@ -269,7 +291,7 @@ async function parseLibrary(takeout_dir: string): Promise<ILibrary> {
                 return null;
             };
 
-            const livePhotoId = (isVideo)
+            const livePhotoId = (isItemVideo)
                 ? (metadata as FfprobeOutput).format.tags["com.apple.quicktime.content.identifier"]
                 : (metadata as ExifToolOutput).MakerNotes?.ContentIdentifier;
             const existingIndex = (livePhotoId) ? parsed_images.findIndex((c) => {
@@ -294,7 +316,7 @@ async function parseLibrary(takeout_dir: string): Promise<ILibrary> {
             }
 
             // Match GPS data
-            if (manifest && !isVideo)
+            if (manifest && !isItemVideo)
             {
                 const exif = metadata as ExifToolOutput;
                 const hasMetadataGeoData = manifest.metadata.geoData.latitude && manifest.metadata.geoData.longitude;
@@ -331,15 +353,15 @@ async function parseLibrary(takeout_dir: string): Promise<ILibrary> {
             }
 
             if (existingIndex !== -1) {
-                const alreadyHas = (isVideo && parsed_images[existingIndex].video) ||
-                (!isVideo && parsed_images[existingIndex].image);
+                const alreadyHas = (isItemVideo && parsed_images[existingIndex].video) ||
+                (!isItemVideo && parsed_images[existingIndex].image);
                 if (alreadyHas) {
                     // TODO: this treats edited photos like originals simply
                     // based on live photo ID.
-                    const existingPath = isVideo 
+                    const existingPath = isItemVideo 
                         ? parsed_images[existingIndex].video?.path
                         : parsed_images[existingIndex].image?.path;
-                    Logger.verbose(`Redundant ${isVideo ? "video" : "image"} found for ${title} - ${quickImageName} (old: ${existingPath}, new: ${itemPath})`);
+                    Logger.verbose(`Redundant ${isItemVideo ? "video" : "image"} found for ${title} - ${quickImageName} (old: ${existingPath}, new: ${itemPath})`);
 
                     parsed_images[existingIndex].extra.push({
                         path: itemPath,
@@ -347,7 +369,7 @@ async function parseLibrary(takeout_dir: string): Promise<ILibrary> {
                     });
                 } else {
                     // Add the info to the existing image entry.
-                    if (isVideo) {
+                    if (isItemVideo) {
                         parsed_images[existingIndex].video = {
                             path: itemPath,
                             manifest: manifest || undefined,
@@ -367,14 +389,14 @@ async function parseLibrary(takeout_dir: string): Promise<ILibrary> {
             } else {
                 // Create a new image entry. Grab metadata.
                 parsed_images.push({
-                    image: (isVideo) ? undefined : {
+                    image: (isItemVideo) ? undefined : {
                         path: itemPath,
                         manifest: manifest || undefined,
                         livePhotoId: livePhotoId,
                         metadata: metadata as ExifToolOutput,
                         size: fs.statSync(itemPath).size,
                     },
-                    video: (!isVideo) ? undefined : {
+                    video: (!isItemVideo) ? undefined : {
                         path: itemPath,
                         manifest: manifest || undefined,
                         livePhotoId: livePhotoId,
