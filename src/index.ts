@@ -65,6 +65,7 @@ interface IImageInfo {
     image_timestamp: number | undefined;
     video_timestamp: number | undefined;
     image_size: number;
+    video_size: string | undefined;
 }
 function getImageInfo(i: ContentInfo): IImageInfo {
     const image_filename = i.image && (i.image.manifest?.metadata.title || path.basename(i.image.path));
@@ -98,6 +99,7 @@ function getImageInfo(i: ContentInfo): IImageInfo {
 
         // Prefer image path for size, since that's what Photos uses for Live Photos.
         image_size: i.image?.size || 0, // TODO: what if no image? 
+        video_size: i.video?.metadata.format.size,
     };
 }
 
@@ -323,7 +325,7 @@ async function parseLibrary(takeout_dir: string): Promise<ILibrary> {
                     const existingPath = isVideo 
                         ? parsed_images[existingIndex].video?.path
                         : parsed_images[existingIndex].image?.path;
-                    Logger.warn(`Redundant ${isVideo ? "video" : "image"} found for ${title} - ${quickImageName} (old: ${existingPath}, new: ${itemPath})`);
+                    Logger.verbose(`Redundant ${isVideo ? "video" : "image"} found for ${title} - ${quickImageName} (old: ${existingPath}, new: ${itemPath})`);
 
                     parsed_images[existingIndex].extra.push({
                         path: itemPath,
@@ -883,7 +885,7 @@ async function main(
                 }
                 const doesImageSizeMatch = (c: ContentInfo): boolean => {
                     const info = getImageInfo(c);
-                    return (info.image_size === img.size);
+                    return (info.image_size === img.size) || (info.video_size === img.size.toString());
                 }
                 const doesImageTimestampMatch = (c: ContentInfo): boolean => {
                     const info = getImageInfo(c);
@@ -905,7 +907,7 @@ async function main(
                     const size_and_timestamp_matcher = (c: ContentInfo) => {
                         return doesImageSizeMatch(c) && doesImageTimestampMatch(c);
                     }
-                    corresponding = findUniquePhotoIndex("size, & timestamp", size_and_timestamp_matcher);
+                    corresponding = findUniquePhotoIndex("size & timestamp", size_and_timestamp_matcher);
                 }
 
                 // OK, one last chance: naive filename match.
@@ -922,7 +924,7 @@ async function main(
                         //
                         // TODO: we need to map the IDs; otherwise we will try
                         // to import this file again if you run again.
-                        Logger.log(`WARNING: Could not find image in json for imported file - ${img.filename} size: ${img.size}, timestamp: ${img.timestamp} (${img.id})`);
+                        Logger.log(`WARNING: Could not find image in json for imported file - ${chalk.yellow(img.filename)} size: ${chalk.yellow(img.size)}, timestamp: ${chalk.yellow(img.timestamp)} (${chalk.yellow(img.id)})`);
                         return;
                     } else {
                         throw new Error(`Could not find image in json for imported file - ${img.filename} size: ${img.size}, timestamp: ${img.timestamp} (${img.id})`);

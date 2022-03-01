@@ -40,6 +40,7 @@ export interface FfprobeOutput {
     // ...many other things...
     format: {
         filename: string;
+        size: string;
         tags: {
             "creation_time": string | undefined; // Something like `2020-02-01T23:58:45.000000Z`
             "com.apple.quicktime.content.identifier": string | undefined;
