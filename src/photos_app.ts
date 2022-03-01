@@ -151,7 +151,6 @@ export function findOrCreateAlbum(title: string) {
 }
 
 export function launchPhotosWithId(media_item_id: string) {
-    const NOT_FOUND = "NOT FOUND";
     const SCRIPT = `
         on run argv
             tell application "Photos"
@@ -168,6 +167,44 @@ export function launchPhotosWithId(media_item_id: string) {
     if (result.stderr.length != 0) {
         throw new Error(result.stderr.toString("utf-8"));
     }
+}
+
+export function getPropertiesForPhotoWithId(media_item_id: string) {
+    const SCRIPT = `
+        on run argv
+            tell application "Photos"
+                set media_item_id to item 1 of argv
+                set img to media item id media_item_id
+                properties of img
+            end tell
+        end run
+    `;
+    const result = child_process.spawnSync("osascript", ["-", media_item_id], { input: SCRIPT });
+    const output = result.stdout.toString("utf-8");
+    if (result.stderr.length != 0) {
+        throw new Error(result.stderr.toString("utf-8"));
+    }
+
+    return output;
+}
+
+
+export function getPropertiesForSelection() {
+    const SCRIPT = `
+        on run argv
+            tell application "Photos"
+                set img to item 1 of (get selection)
+                properties of img
+            end tell
+        end run
+    `;
+    const result = child_process.spawnSync("osascript", ["-"], { input: SCRIPT });
+    const output = result.stdout.toString("utf-8");
+    if (result.stderr.length != 0) {
+        throw new Error(result.stderr.toString("utf-8"));
+    }
+
+    return output;
 }
 
 export function getAlbumPhotosCount(album_id: string) {
