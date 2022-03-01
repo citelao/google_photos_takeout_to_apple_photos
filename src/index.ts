@@ -339,9 +339,9 @@ async function parseLibrary(takeout_dir: string, album_name: string | undefined)
             if (!manifest) {
                 if (existingIndex !== -1 && 
                     (parsed_images[existingIndex].image?.manifest ||  parsed_images[existingIndex].video?.manifest)) {
-                    Logger.verbose(`No manifest found for ${itemPath}, but we already have one for `);
+                    Logger.verbose(`No manifest found for ${itemPath}, but we already have one for it`);
                 } else {
-                    Logger.warn(`No manifest found for ${itemPath}`);
+                    Logger.warn(`No manifest found for ${chalk.yellow(itemPath)}`);
                 }
             }
 
