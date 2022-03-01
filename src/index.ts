@@ -251,10 +251,6 @@ async function parseLibrary(takeout_dir: string, album_name: string | undefined)
         }
         const title = metadata?.title || a.name;
 
-        if (parts.remaining.length !== 0) {
-            Logger.warn(`Unrecognized objects: ${parts.remaining.map(r => r).join(",\r\n")}`);
-        }
-
         return {
             // name: a.name,
             dirs: a.dirs,
@@ -262,6 +258,7 @@ async function parseLibrary(takeout_dir: string, album_name: string | undefined)
             title: title,
             manifests: parts.manifests,
             images_and_movies: parts.images_and_movies,
+            remaining: parts.remaining,
         };
     }).filter((a) => {
         // If asked to parse only certain albums, filter out the wrong albums here.
@@ -274,6 +271,9 @@ async function parseLibrary(takeout_dir: string, album_name: string | undefined)
     });
    
     const albums = await Promise.all(albumParts.map(async (a): Promise<IAlbum> => {    
+        if (a.remaining.length !== 0) {
+            Logger.warn(`Unrecognized objects: \r\n${a.remaining.map(r => "\t- " + chalk.yellow(r)).join(",\r\n")}`);
+        }
 
         const parsedJsons = a.manifests.map((p) => {
             return {
