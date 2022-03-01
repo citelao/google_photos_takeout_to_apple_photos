@@ -166,7 +166,7 @@ interface IAlbum {
     }[];
 }
 type ILibrary = IAlbum[];
-async function parseLibrary(takeout_dir: string): Promise<ILibrary> {
+async function parseLibrary(takeout_dir: string, album_name: string | undefined): Promise<ILibrary> {
     const files = fs.readdirSync(takeout_dir, { withFileTypes: true });
     
     // TODO: handle someone giving the "Google Photos" directory or a directory containing Google Photos directly.
@@ -232,40 +232,60 @@ async function parseLibrary(takeout_dir: string): Promise<ILibrary> {
             remaining: remaining
         };
     }
-   
-    const albums = await Promise.all(albumFolders.map(async (a): Promise<IAlbum> => {    
+
+    const albumParts = albumFolders.map((a) => {
         const parts = getPartsForAlbum(a.dirs);
         let metadata: AlbumMetadataJson | null = null;
         if (parts.albumMetadata) {
             metadata = parseAlbumMetadataJson(parts.albumMetadata);
         }
         const title = metadata?.title || a.name;
-        
+
         if (parts.remaining.length !== 0) {
             Logger.warn(`Unrecognized objects: ${parts.remaining.map(r => r).join(",\r\n")}`);
         }
 
-        const parsedJsons = parts.manifests.map((p) => {
+        return {
+            // name: a.name,
+            dirs: a.dirs,
+            metadata: metadata,
+            title: title,
+            manifests: parts.manifests,
+            images_and_movies: parts.images_and_movies,
+        };
+    }).filter((a) => {
+        // If asked to parse only certain albums, filter out the wrong albums here.
+        const shouldFilterToName = !!album_name;
+        if (shouldFilterToName && album_name !== a.title) {
+            return false;
+        }
+
+        return true;
+    });
+   
+    const albums = await Promise.all(albumParts.map(async (a): Promise<IAlbum> => {    
+
+        const parsedJsons = a.manifests.map((p) => {
             return {
                 path: p,
                 metadata: parseImageMetadataJson(p),
             }
         });
     
-        Logger.log(chalk.gray(`${a.name} - Getting EXIF data...`));
+        Logger.log(chalk.gray(`${a.title} - Getting EXIF data...`));
         const exifs = (await Promise.all(a.dirs.map(async (d) => await getExifToolDataForDirectory(d)))).flat();
 
         // Ensure we have JSONs for each image/movie:
-        Logger.log(chalk.gray(`${a.name} - Finding manifests...`));
+        Logger.log(chalk.gray(`${a.title} - Finding manifests...`));
         const parsed_images: ContentInfo[] = [];
-        for (const itemPath of parts.images_and_movies) {
+        for (const itemPath of a.images_and_movies) {
             const quickImageName = path.basename(itemPath);
 
             // First, we need to see if this a live photo.
             const isItemVideo = isVideo(itemPath)
             const metadata = (isItemVideo) ? await getFfprobeData(itemPath) : exifs.find((e) => e.SourceFile === itemPath);
             if (!metadata) {
-                throw new Error(`No metadata for ${title} - ${quickImageName}`);
+                throw new Error(`No metadata for ${a.title} - ${quickImageName}`);
             }
 
             const getMatchingManifest = (): ManifestAndPath | null => {
@@ -342,13 +362,13 @@ async function parseLibrary(takeout_dir: string): Promise<ILibrary> {
                             }, latLon);
                         const geoDataExifMatch = geoDataExifDist < GPS_PRECISION;
                         if (!geoDataMatch || !geoDataExifMatch) {
-                            Logger.warn(`Geodata mismatch: ${title} - ${quickImageName} (${manifest.metadata.geoDataExif.latitude}, ${manifest.metadata.geoDataExif.longitude} [${geoDataDist}] & ${manifest.metadata.geoData.latitude}, ${manifest.metadata.geoData.longitude} [${geoDataExifDist}] => ${latLon.lat}, ${latLon.lon})`);
+                            Logger.warn(`Geodata mismatch: ${a.title} - ${quickImageName} (${manifest.metadata.geoDataExif.latitude}, ${manifest.metadata.geoDataExif.longitude} [${geoDataDist}] & ${manifest.metadata.geoData.latitude}, ${manifest.metadata.geoData.longitude} [${geoDataExifDist}] => ${latLon.lat}, ${latLon.lon})`);
                         }
                     } else {
-                        Logger.warn(`No EXIF location data, but location metadata for ${title} - ${quickImageName}`);
+                        Logger.warn(`No EXIF location data, but location metadata for ${a.title} - ${quickImageName}`);
                     }
                 } else if (hasGeoData) {
-                    Logger.warn(`Has EXIF data but no location metadata ${title} - ${quickImageName}`);
+                    Logger.warn(`Has EXIF data but no location metadata ${a.title} - ${quickImageName}`);
                 }
             }
 
@@ -361,7 +381,7 @@ async function parseLibrary(takeout_dir: string): Promise<ILibrary> {
                     const existingPath = isItemVideo 
                         ? parsed_images[existingIndex].video?.path
                         : parsed_images[existingIndex].image?.path;
-                    Logger.verbose(`Redundant ${isItemVideo ? "video" : "image"} found for ${title} - ${quickImageName} (old: ${existingPath}, new: ${itemPath})`);
+                    Logger.verbose(`Redundant ${isItemVideo ? "video" : "image"} found for ${a.title} - ${quickImageName} (old: ${existingPath}, new: ${itemPath})`);
 
                     parsed_images[existingIndex].extra.push({
                         path: itemPath,
@@ -407,7 +427,7 @@ async function parseLibrary(takeout_dir: string): Promise<ILibrary> {
             }
         }
 
-        const correspondingPhotosAlbum = photosAlbums.find((pa) => pa.name === title);
+        const correspondingPhotosAlbum = photosAlbums.find((pa) => pa.name === a.title);
         const photosInfo = (correspondingPhotosAlbum)
             ? {
                 id: correspondingPhotosAlbum.id,
@@ -416,10 +436,10 @@ async function parseLibrary(takeout_dir: string): Promise<ILibrary> {
             : null;
 
         return {
-            title: title,
+            title: a.title,
             existingPhotosInfo: photosInfo,
             dirs: a.dirs,
-            metadata: metadata,
+            metadata: a.metadata,
             content: parsed_images,
             manifests: parsedJsons,
         }
@@ -504,15 +524,19 @@ async function parseLibrary(takeout_dir: string): Promise<ILibrary> {
     return albums;
 }
 
-async function getParsedLibrary(takeout_path_or_preparsed_file: string): Promise<{ library: ILibrary; is_reading_existing_parse: boolean; }>
+async function getParsedLibrary(takeout_path_or_preparsed_file: string, album_name: string | undefined): Promise<{ library: ILibrary; is_reading_existing_parse: boolean; }>
 {
     const is_reading_existing_parse = path.extname(takeout_path_or_preparsed_file) === ".json";
     let albums: IAlbum[];
     if (is_reading_existing_parse) {
         const library_data = fs.readFileSync(takeout_path_or_preparsed_file);
         albums = JSON.parse(library_data.toString('utf-8')) as IAlbum[];
+
+        if (album_name) {
+            albums = albums.filter((a) => a.title === album_name);
+        }
     } else {
-        albums = await parseLibrary(takeout_path_or_preparsed_file);
+        albums = await parseLibrary(takeout_path_or_preparsed_file, album_name);
     }
 
     return {
@@ -536,15 +560,8 @@ type ImportedImage = {
 };
 async function getParsedLibraryAugmentedWithPreviousRuns(takeout_path_or_preparsed_file: string, album: string | undefined): Promise<{ library: ILibrary; is_reading_existing_parse: boolean; }>
 {
-    const { library, is_reading_existing_parse } = await getParsedLibrary(takeout_path_or_preparsed_file);
-
-    // TODO: this does indeed filter all processing to just this album, but this
-    // does not affect initial library read. If we want to be able to filter
-    // *parsing* to specific albums, we'll have to add something to
-    // `parseLibrary`.
-    const albums = (album)
-        ? library.filter((a) => a.title === album)
-        : library;
+    const { library, is_reading_existing_parse } = await getParsedLibrary(takeout_path_or_preparsed_file, album);
+    const albums = library;
 
     // Augment this data with stuff from previous runs.
     //
