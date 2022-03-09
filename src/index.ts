@@ -640,6 +640,7 @@ async function getParsedLibraryAugmentedWithPreviousRuns(takeout_path_or_prepars
                 if (correspondingAlbumIndex === -1) {
                     if (album) {
                         Logger.verbose(`Ignoring image for album ${pi.albumId.trim()} (img: ${pi.mainPath}) since '-a ${album}' was passed.`);
+                        return;
                     } else {
                         throw new Error(`Missing album for ${pi.mainPath} (wanted ${pi.albumId.trim()})`);
                     }
