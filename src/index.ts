@@ -1041,8 +1041,33 @@ async function main(
                 Logger.log(`${a.title} => all imported.`);
             } else {
                 Logger.log(`${a.title} => missing ${notImported.length}:`);
-                notImported.forEach((c) => {
-                    Logger.log(`\t- ${getContentInfoPath(c)}`);
+                const CHUNK_SIZE = 200;
+                const images_to_find = notImported.map((i) => getImageInfo(i));
+                const maybeFoundPhotos = chunked(images_to_find, CHUNK_SIZE, (imgs) => {
+                    const mappedImgs = imgs.map((i) => {
+                        if (!i.image_filename && !i.video_filename) {
+                            throw new Error(`Missing ANY filenames for (size: ${i.image_size})`);
+                        }
+        
+                        const item = {
+                            image_filename: i.image_filename || i.video_filename!,
+                            image_timestamp: undefined, // Same as beginning but use an undefined timestamp!
+                            image_size: i.image_size || i.video_size!,
+                        };
+                        Logger.verbose(chalk.gray(`\t\t\tLooking for ${item.image_filename} (timestamp: ${item.image_timestamp}; size: ${item.image_size})`));
+                        return item;
+                    });
+                    return findPhotoInPhotos(mappedImgs);
+                });
+                notImported.forEach((c, i) => {
+                    const found = (maybeFoundPhotos[i])
+                        ? getInfoForPhotoIds([ maybeFoundPhotos[i]! ])[0]
+                        : null;
+                    if (found) {
+                        Logger.log(chalk.gray(`\t- ${getContentInfoPath(c)}\n\t\t${chalk.gray(`(might be ${chalk.yellow(found?.id)})`)}`));
+                    } else {
+                        Logger.log(`\t- ${getContentInfoPath(c)} ${chalk.gray("(no candidates found)")}`);
+                    }
                 });
             }
         });
