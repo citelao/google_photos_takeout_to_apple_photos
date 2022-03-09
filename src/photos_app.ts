@@ -58,7 +58,7 @@ end tell
     return albums;
 }
 
-export function findPhotoInPhotos(images: {image_filename: string, image_timestamp?: number | string , image_size: number}[]): (string | null)[] {
+export function findPhotoInPhotos(images: {image_filename: string, image_timestamp?: number | string , image_size?: number}[]): (string | null)[] {
     // Derived from https://github.com/akhudek/google-photos-to-apple-photos/blob/main/migrate-albums.py
     const DIVIDER = "✂";
     const TIMESTAMP_TOLERANCE = "2";
@@ -79,7 +79,13 @@ export function findPhotoInPhotos(images: {image_filename: string, image_timesta
                     set myFilename to filename of img
                     set myTimestamp to my unixDate(get date of img)
                     set mySize to size of img                
-                    if image_filename is equal to myFilename and mySize is equal to (image_size as integer)
+                    if image_filename is equal to myFilename
+                        if image_size is not equal to ""
+                            if mySize is not equal to (image_size as integer)
+                                return ""
+                            end if
+                        end if
+
                         if image_timestamp is equal to ""
                             return (get id of img)
                         end if
@@ -115,7 +121,7 @@ export function findPhotoInPhotos(images: {image_filename: string, image_timesta
             return output
         end run
     `;
-    const flatArgs = images.map((i) => [i.image_filename, (i.image_timestamp || "").toString(), i.image_size.toString()]).flat();
+    const flatArgs = images.map((i) => [i.image_filename, (i.image_timestamp || "").toString(), (i.image_size || "").toString()]).flat();
     const result = child_process.spawnSync("osascript", ["-", ... flatArgs], { input: FIND_PHOTO_SCRIPT});
     const output = result.stdout.toString("utf-8");
     if (result.stderr.length != 0) {

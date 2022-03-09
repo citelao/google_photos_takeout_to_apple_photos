@@ -3,9 +3,9 @@ import { findPhotoInPhotos } from "../src/photos_app";
 
 program
     .argument('<filename>', 'filename to find')
-    .argument('<size>', 'size in bytes')
+    .argument('[size]', 'size in bytes')
     .argument('[timestamp]', 'timestamp in seconds')
-    .action(async (filename: string, size: number, timestamp: number | undefined) => {
+    .action(async (filename: string, size: number | undefined, timestamp: number | undefined) => {
         const result = findPhotoInPhotos([{
             image_filename: filename,
             image_size: size,
