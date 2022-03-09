@@ -6,7 +6,8 @@
   "private": true,
   "scripts": {
     "go": "ts-node src/index.ts",
-    "inspect": "ts-node contrib/inspector.ts"
+    "inspect": "ts-node contrib/inspector.ts",
+    "search": "ts-node contrib/searcher.ts"
   },
   "devDependencies": {
     "ts-node": "^10.4.0",
