@@ -79,13 +79,7 @@ export function findPhotoInPhotos(images: {image_filename: string, image_timesta
                     set myFilename to filename of img
                     set myTimestamp to my unixDate(get date of img)
                     set mySize to size of img                
-                    if image_filename is equal to myFilename
-                        if image_size is not equal to ""
-                            if mySize is not equal to (image_size as integer)
-                                skip
-                            end if
-                        end if
-
+                    if image_filename is equal to myFilename and ((image_size is equal to "") or mySize is equal to (image_size as integer))
                         if image_timestamp is equal to ""
                             return (get id of img)
                         end if
