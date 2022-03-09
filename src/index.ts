@@ -16,18 +16,21 @@ program
     .option('-w --whatif', 'what if?')
     .option('-d --do_actions', 'actually perform actions, not just parse')
     .option('-a --album <album_name>', 'limit to importing a specific album')
+    .option('-s --skip_albums <album_names...>', 'skip importing specific albums')
     .option('--dump --dump_parsed <output_file>', 'dump the parsed, augmented library to a file, even if reading from a file')
     .action(async (takeout_path_or_preparsed_file) => {
         const what_if: boolean = program.opts().whatif;
         const do_actions: boolean = program.opts().do_actions;
         const album: string | undefined = program.opts().album;
         const dump_parsed: string | undefined = program.opts().dump_parsed;
+        const skip_albums: string[] | undefined = program.opts().skip_albums;
         await main({
             takeout_path_or_preparsed_file: takeout_path_or_preparsed_file, 
             do_actions,
             what_if,
             album,
-            dump_parsed
+            dump_parsed,
+            skip_albums
         });
     });
 
@@ -190,7 +193,7 @@ interface IAlbum {
     }[];
 }
 type ILibrary = IAlbum[];
-async function parseLibrary(takeout_dir: string, album_name: string | undefined): Promise<ILibrary> {
+async function parseLibrary(takeout_dir: string, album_name: string | undefined, skip_albums: string[] | undefined): Promise<ILibrary> {
     const files = fs.readdirSync(takeout_dir, { withFileTypes: true });
     
     // TODO: handle someone giving the "Google Photos" directory or a directory containing Google Photos directly.
@@ -276,6 +279,11 @@ async function parseLibrary(takeout_dir: string, album_name: string | undefined)
         // If asked to parse only certain albums, filter out the wrong albums here.
         const shouldFilterToName = !!album_name;
         if (shouldFilterToName && album_name !== a.title) {
+            return false;
+        }
+
+        const shouldFilterToSkipAlbums = !!skip_albums;
+        if (shouldFilterToSkipAlbums && skip_albums.includes(a.title)) {
             return false;
         }
 
@@ -550,7 +558,7 @@ async function parseLibrary(takeout_dir: string, album_name: string | undefined)
     return albums;
 }
 
-async function getParsedLibrary(takeout_path_or_preparsed_file: string, album_name: string | undefined): Promise<{ library: ILibrary; is_reading_existing_parse: boolean; }>
+async function getParsedLibrary(takeout_path_or_preparsed_file: string, album_name: string | undefined, skip_albums: string[] | undefined): Promise<{ library: ILibrary; is_reading_existing_parse: boolean; }>
 {
     const is_reading_existing_parse = path.extname(takeout_path_or_preparsed_file) === ".json";
     let albums: IAlbum[];
@@ -561,8 +569,12 @@ async function getParsedLibrary(takeout_path_or_preparsed_file: string, album_na
         if (album_name) {
             albums = albums.filter((a) => a.title === album_name);
         }
+
+        if (skip_albums) {
+            albums = albums.filter((a) => !skip_albums.includes(a.title));
+        }
     } else {
-        albums = await parseLibrary(takeout_path_or_preparsed_file, album_name);
+        albums = await parseLibrary(takeout_path_or_preparsed_file, album_name, skip_albums);
     }
 
     return {
@@ -584,9 +596,9 @@ type ImportedImage = {
     videoPath?: string,
     albumId: string,
 };
-async function getParsedLibraryAugmentedWithPreviousRuns(takeout_path_or_preparsed_file: string, album: string | undefined): Promise<{ library: ILibrary; is_reading_existing_parse: boolean; }>
+async function getParsedLibraryAugmentedWithPreviousRuns(takeout_path_or_preparsed_file: string, album: string | undefined, skip_albums: string[] | undefined): Promise<{ library: ILibrary; is_reading_existing_parse: boolean; }>
 {
-    const { library, is_reading_existing_parse } = await getParsedLibrary(takeout_path_or_preparsed_file, album);
+    const { library, is_reading_existing_parse } = await getParsedLibrary(takeout_path_or_preparsed_file, album, skip_albums);
     const albums = library;
 
     // Augment this data with stuff from previous runs.
@@ -603,6 +615,11 @@ async function getParsedLibraryAugmentedWithPreviousRuns(takeout_path_or_prepars
             parsed_albums.forEach((pa) => {
                 if (album && pa.title != album) {
                     Logger.verbose(`Ignoring album ${pa.title} since '-a ${album}' was passed.`);
+                    return;
+                }
+
+                if (skip_albums && skip_albums.includes(pa.title)) {
+                    Logger.verbose(`Ignoring album ${pa.title} since '-s ${skip_albums.join(", ")}' was passed.`);
                     return;
                 }
                 
@@ -638,8 +655,8 @@ async function getParsedLibraryAugmentedWithPreviousRuns(takeout_path_or_prepars
             parsed_images.forEach((pi) => {
                 const correspondingAlbumIndex = albums.findIndex((a) => a.existingPhotosInfo?.id.trim() === pi.albumId.trim());
                 if (correspondingAlbumIndex === -1) {
-                    if (album) {
-                        Logger.verbose(`Ignoring image for album ${pi.albumId.trim()} (img: ${pi.mainPath}) since '-a ${album}' was passed.`);
+                    if (album || skip_albums) {
+                        Logger.verbose(`Ignoring image for album ${pi.albumId.trim()} (img: ${pi.mainPath}) since '-a ${album}' or '-s ${skip_albums?.join(", ")}' was passed.`);
                         return;
                     } else {
                         throw new Error(`Missing album for ${pi.mainPath} (wanted ${pi.albumId.trim()})`);
@@ -670,15 +687,16 @@ async function getParsedLibraryAugmentedWithPreviousRuns(takeout_path_or_prepars
 }
 
 async function main(
-    { takeout_path_or_preparsed_file, do_actions, what_if, album, dump_parsed }: 
+    { takeout_path_or_preparsed_file, do_actions, what_if, album, dump_parsed, skip_albums }: 
     { 
         takeout_path_or_preparsed_file: string; 
         do_actions: boolean; 
         what_if: boolean; 
         album: string | undefined;
         dump_parsed: string | undefined;
+        skip_albums: string[] | undefined;
     }) {
-    const { library, is_reading_existing_parse } = await getParsedLibraryAugmentedWithPreviousRuns(takeout_path_or_preparsed_file, album);
+    const { library, is_reading_existing_parse } = await getParsedLibraryAugmentedWithPreviousRuns(takeout_path_or_preparsed_file, album, skip_albums);
     const albums = library;
     Logger.log();
     
