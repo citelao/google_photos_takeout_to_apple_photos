@@ -60,18 +60,25 @@ type ContentInfo = {
     }>;
 };
 
+function isoTimestampToSeconds(timestamp?: string): number | undefined {
+    if (!timestamp) {
+        return undefined;
+    }
+    return (new Date(timestamp).getTime()) / 1000;
+}
+
 interface IImageInfo {
     image_filename: string | undefined;
     video_filename: string | undefined;
     extras: Array<{
         filename: string;
         timestamp: number | undefined;
-        size: number | string | undefined;
+        size: string | number | undefined;
     }>;
     image_timestamp: number | undefined;
     video_timestamp: number | undefined;
     image_size: number;
-    video_size: string | undefined;
+    video_size: number | undefined;
 }
 function getImageInfo(i: ContentInfo): IImageInfo {
     const image_filename = i.image && (i.image.manifest?.metadata.title || path.basename(i.image.path));
@@ -83,17 +90,18 @@ function getImageInfo(i: ContentInfo): IImageInfo {
 
     const extras = i.extra.map((f) => {
         const timestamp = (isVideo(f.path))
-            ? (f.metadata as FfprobeOutput).format.tags["com.apple.quicktime.creationdate"]
+            ? isoTimestampToSeconds((f.metadata as FfprobeOutput).format.tags["com.apple.quicktime.creationdate"] || (f.metadata as FfprobeOutput).format.tags["com.apple.quicktime.creationdate"])
             : (f.metadata as ExifToolOutput).Composite.SubSecDateTimeOriginal;
         return {
             filename: f.manifest?.metadata.title || path.basename(f.path),
-            timestamp: new Date(timestamp!).getTime(),
+            timestamp: timestamp,
             size: f.size,
         }
     });
 
-    const video_timestamp_string = i.video?.metadata.format.tags.creation_time || i.video?.metadata.format.tags["com.apple.quicktime.content.identifier"];
-    const video_timestamp = (!!video_timestamp_string && new Date(video_timestamp_string).getTime()) || undefined;
+    // Prefer creationdate; it's more accurate.
+    const video_timestamp_string = i.video?.metadata.format.tags["com.apple.quicktime.creationdate"] || i.video?.metadata.format.tags.creation_time;
+    const video_timestamp = isoTimestampToSeconds(video_timestamp_string);
     // Again:
     //
     // - the actual file name can be truncated if it's too long
@@ -113,7 +121,7 @@ function getImageInfo(i: ContentInfo): IImageInfo {
         
         // Prefer image path for size, since that's what Photos uses for Live Photos.
         image_size: i.image?.size || 0, // TODO: what if no image? 
-        video_size: i.video?.metadata.format.size,
+        video_size: (!!i.video?.metadata.format.size || undefined) && parseInt(i.video?.metadata.format.size!),
 
         extras: extras,
     };
@@ -517,11 +525,13 @@ async function parseLibrary(takeout_dir: string, album_name: string | undefined)
                     throw new Error(`Missing ANY filenames for (size: ${i.image_size})`);
                 }
 
-                return {
+                const item = {
                     image_filename: i.image_filename || i.video_filename!,
                     image_timestamp: i.image_timestamp || i.video_timestamp,
-                    image_size: i.image_size
+                    image_size: i.image_size || i.video_size!,
                 };
+                Logger.verbose(chalk.gray(`\t\t\tLooking for ${item.image_filename} (timestamp: ${item.image_timestamp}; size: ${item.image_size})`));
+                return item;
             });
             return findPhotoInPhotos(mappedImgs);
         });
@@ -954,7 +964,7 @@ async function main(
                 }
                 const doesImageSizeMatch = (c: ContentInfo): boolean => {
                     const info = getImageInfo(c);
-                    return (info.image_size === img.size) || (info.video_size === img.size.toString()) || !!info.extras.find((e) => e.size === img.size);
+                    return (info.image_size === img.size) || (info.video_size === img.size) || !!info.extras.find((e) => e.size === img.size);
                 }
                 const doesImageTimestampMatch = (c: ContentInfo): boolean => {
                     const info = getImageInfo(c);
