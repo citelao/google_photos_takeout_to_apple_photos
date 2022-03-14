@@ -112,7 +112,7 @@ In the end, I recommend a different approach to imports:
 
 1. Backup *everything. Keep all the Google Takeout ZIPs and your original Apple Photos library. Set Apple Photos "Download Originals to this Mac" (which I'm leaving on permanently---it's so nice to have everything local again and I never want to give that up). Keep them on external drives and The Cloud somewhere.
 
-2. TODO: find some way to recreate albums. Honestly, maybe do it by hand.
+2. Recreate albums. Honestly, maybe do it by hand. One option is simply run PhotoSweeper X *by album* in Takeout---mark all the dupes and then instead of deleting them in Apple Photos, drag them into a new album. You might also be able to script it somehow, but I'm not sure I'm ready for that commitment.
 
 3. Run PhotoSweeper X on your combined Takeout folders + Apple Photos library (once everything is downloaded). Prioritize Apple Photos photos and have PhotoSweeper move all the dupes in the Takeout folder into the trash.
 
