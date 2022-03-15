@@ -159,8 +159,16 @@ program
             }
             return acc;
         }, []);
+        itemsByAlbums.sort((a, b) => {
+            return (a.title || "").localeCompare(b.title || ""); 
+        });
 
-        console.dir(itemsByAlbums);
+        Logger.log(`Albums found:`);
+        itemsByAlbums.forEach((a) => {
+            Logger.log(`\t- ${a.title || chalk.grey("(null)")} ${chalk.gray(`(${a.matching.length} items)`)}`);
+        });
+
+        // TODO: do action
     });
 
 program.parse();
