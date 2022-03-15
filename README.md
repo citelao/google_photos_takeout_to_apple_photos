@@ -132,7 +132,7 @@ I've had people recommend keeping photos in the filesystem only, but albums, tag
 
 Prerequisites: PhotoSweeper X, a download of your Google Takeout photos, a Photos library.
 
-1. Run PhotoSweeper X on your Photos library *plus* the Google Takeout directory.
+1. Run PhotoSweeper X on your Photos library side by side with the Google Takeout directory.
 
 2. `File > Export to XML > List of Photos...`
 

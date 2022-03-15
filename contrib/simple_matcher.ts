@@ -15,7 +15,7 @@ interface IPhotoSweeperFile {
 
     // Beta fields
     libraryPath?: string;
-    mediaItemId?: string;
+    mediaItemID?: string;
 }
 interface IPhotoSweeperOutput {
     Results: Array<{
@@ -24,29 +24,36 @@ interface IPhotoSweeperOutput {
     }>;
 }
 
-function isPhotoLibraryPhoto(file: IPhotoSweeperFile): boolean {
-    if (!!file.mediaItemId) {
+function isPhotoLibraryPhoto(file: IPhotoSweeperFile, loose = true): boolean {
+    if (!!file.mediaItemID) {
         return true;
     }
 
-    // TODO: by default, media item ID is not available in the XML. Use a
-    // heuristic.
-    return file.path.includes(".photoslibrary");
+    if (loose) {
+        // TODO: by default, media item ID is not available in the XML. Use a
+        // heuristic.
+        return file.path.includes(".photoslibrary");
+    }
+
+    return false;
 }
 
 program
     .argument('<photosweeper_output>', 'plist/xml output from PhotoSweeper')
     .argument('<takeout_dir>', 'base takeout dir (that has all the subtakeouts)')
     .option("-d --do_action", "actually do stuff")
+    .option("-l --loose", "be loose with matching (don't require media item IDs)")
     .action(async (photosweeper_output: string, takeout_dir: string) => {
         const do_action: boolean = program.opts().do_action;
+        const loose: boolean = program.opts().loose;
 
         const content = fs.readFileSync(photosweeper_output);
         const parsed = plist.parse(content.toString("utf8")) as any as IPhotoSweeperOutput;
 
         // Ensure all libraries are the same.
         const libraryPaths = parsed.Results
-            .flatMap((r) => r.Files.map((f) => f.mediaItemId));
+            .flatMap((r) => r.Files.map((f) => f.libraryPath))
+            .filter((p) => !!p);
         // https://stackoverflow.com/questions/1960473/get-all-unique-values-in-a-javascript-array-remove-duplicates
         const dedupedLibraryPaths = libraryPaths
             .filter((libraryPath, index, self) => self.indexOf(libraryPath) === index);
@@ -79,20 +86,18 @@ program
             }>;
         };
         const matchings: Matching[] = parsed.Results.map((r) => {
-            const mediaItems = r.Files.filter((f) => isPhotoLibraryPhoto(f));
-            const takeoutFiles = r.Files.filter((f) => !isPhotoLibraryPhoto(f));
+            const mediaItems = r.Files.filter((f) => isPhotoLibraryPhoto(f, loose));
+            const takeoutFiles = r.Files.filter((f) => !isPhotoLibraryPhoto(f, loose));
             return {
                 takeoutFiles: takeoutFiles.map((f) => {
                     return { path: f.path };
                 }),
                 mediaItems: mediaItems.map((f) => {
-                    // TODO:  don't always have an ID.
-                    //
-                    // if (!f.mediaItemId) {
-                    //     throw new Error(`Unexpected no media item ID ${f}`);
-                    // }
+                    if (!loose && !f.mediaItemID) {
+                        throw new Error(`Unexpected no media item ID ${r.GroupName} ${f.path}`);
+                    }
                     return {
-                        id: f.mediaItemId,
+                        id: f.mediaItemID,
                         path: f.path
                     };
                 }),
