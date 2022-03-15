@@ -159,6 +159,8 @@ program
             }
             return acc;
         }, []);
+
+        // https://stackoverflow.com/questions/51165/how-to-sort-strings-in-javascript
         itemsByAlbums.sort((a, b) => {
             return (a.title || "").localeCompare(b.title || ""); 
         });
@@ -166,6 +168,13 @@ program
         Logger.log(`Albums found:`);
         itemsByAlbums.forEach((a) => {
             Logger.log(`\t- ${a.title || chalk.grey("(null)")} ${chalk.gray(`(${a.matching.length} items)`)}`);
+
+            const missingPhotoId = a.matching.filter((m) => {
+                return (m.mediaItems.length === 0);
+            });
+            if (missingPhotoId.length > 0) {
+                Logger.log(`\t\t=> ${missingPhotoId.length} missing photo ID`);
+            }
         });
 
         // TODO: do action
