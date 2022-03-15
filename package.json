@@ -7,16 +7,21 @@
   "scripts": {
     "go": "ts-node src/index.ts",
     "inspect": "ts-node contrib/inspector.ts",
-    "search": "ts-node contrib/searcher.ts"
+    "search": "ts-node contrib/searcher.ts",
+    "simple": "ts-node contrib/simple_matcher.ts"
   },
   "devDependencies": {
+    "@types/xml2js": "^0.4.9",
     "ts-node": "^10.4.0",
     "typescript": "^4.5.5"
   },
   "dependencies": {
+    "@types/plist": "^3.0.2",
     "chalk": "^4.1.2",
     "commander": "^9.0.0",
     "exifr": "^7.1.3",
-    "strip-ansi": "^6.0.1"
+    "plist": "^3.0.4",
+    "strip-ansi": "^6.0.1",
+    "xml2js": "^0.4.23"
   }
 }

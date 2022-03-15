@@ -8,6 +8,7 @@ import { program } from "commander";
 import { getAlbumFolders, getGooglePhotosDirsFromTakeoutDir } from "../src/google_takeout_dirs";
 import { parseAlbumMetadataJson } from "../src/google_manifests";
 import Logger from "../src/Logger";
+import { addPhotosToAlbumIfMissing } from "../src/photos_app";
 
 interface IPhotoSweeperFile {
     path: string;
@@ -43,9 +44,11 @@ program
     .argument('<takeout_dir>', 'base takeout dir (that has all the subtakeouts)')
     .option("-d --do_action", "actually do stuff")
     .option("-l --loose", "be loose with matching (don't require media item IDs)")
+    .option("-w --what_if", "what if?")
     .action(async (photosweeper_output: string, takeout_dir: string) => {
         const do_action: boolean = program.opts().do_action;
         const loose: boolean = program.opts().loose;
+        const what_if: boolean = program.opts().what_if;
 
         const content = fs.readFileSync(photosweeper_output);
         const parsed = plist.parse(content.toString("utf8")) as any as IPhotoSweeperOutput;
@@ -182,7 +185,23 @@ program
             }
         });
 
-        // TODO: do action
+        if (!do_action) {
+            Logger.log(`Use -d to actually add the items to albums.`);
+            return;
+        }
+
+        // DO THE WORK!
+        Logger.log(`Adding items to album:`);
+        itemsByAlbums.forEach((a) => {
+            if (!a.title) {
+                Logger.log(`\t- Skipping album with no name`);
+                return;
+            }
+            const ids = a.matching.flatMap((m) => m.mediaItems.map((i) => i.id)).filter((i) => !!i) as string[];
+            const added = addPhotosToAlbumIfMissing(a.title, ids, what_if);
+
+            Logger.log(`\t- Added ${added} items to ${a.title}`);
+        });
     });
 
 program.parse();
