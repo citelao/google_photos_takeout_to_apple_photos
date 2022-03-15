@@ -127,3 +127,15 @@ Long term:
 * Keep everything local always. That's why I paid for big storage on my computer. If you have too many photos for that, buy Lightroom or Capture One.
 
 I've had people recommend keeping photos in the filesystem only, but albums, tagging, viewing, sharing, and remote access are *so much better* in an app that it's a non-starter for me. I wish there were something better.
+
+#### Recommendations using simpler_matcher.ts
+
+Prerequisites: PhotoSweeper X, a download of your Google Takeout photos, a Photos library.
+
+1. Run PhotoSweeper X on your Photos library *plus* the Google Takeout directory.
+
+2. `File > Export to XML > List of Photos...`
+
+3. Run `npm run simple -- path/to/the/export.plist`
+
+4. TODO: import remaining
