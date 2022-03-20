@@ -83,6 +83,7 @@ program
         });
 
         // Pair live photos if asked.
+        let contentIdsMap = new Map<string, string | null>();
         if (pair_live_photos)
         {
             let ids: ContentIdentifiersOutput[] = [];
@@ -115,8 +116,14 @@ program
                 const file = Logger.getFileOrFallbackTemporaryFile(output_file);
                 fs.writeFileSync(file, JSON.stringify(ids, undefined, 4));
                 Logger.log(chalk.gray(`Output to ${chalk.green(file)}`));
-                return;
             }
+
+            ids.forEach((i) => {
+                if (contentIdsMap.has(i.SourceFile)) {
+                    throw new Error(`Already have ID ${contentIdsMap.get(i.SourceFile)} for ${i.SourceFile} (want to set to ${i.ContentIdentifier})`);
+                }
+                contentIdsMap.set(i.SourceFile, i.ContentIdentifier || null);
+            });
         }
 
         // Build photos => albums match
@@ -218,6 +225,19 @@ program
         Logger.log(`Albums found:`);
         itemsByAlbums.forEach((a) => {
             Logger.log(`\t- ${a.title || chalk.grey("(null)")} ${chalk.gray(`(${a.matching.length} items)`)}`);
+
+            const totalWithContentIdLookup = a.matching.filter((m) => {
+                return !!m.takeoutFiles.find((f) => contentIdsMap.has(f.path));
+            });
+            const totalWithActualContentId = a.matching.filter((m) => {
+                return !!m.takeoutFiles.find((f) => contentIdsMap.has(f.path) && contentIdsMap.get(f.path) !== null);
+            });
+            if (totalWithContentIdLookup.length !== a.matching.length) {
+                Logger.log(chalk.yellow(`\t\t=> Only know content ID status for ${totalWithContentIdLookup.length}.`));
+            }
+            if (totalWithActualContentId.length > 0) {
+                Logger.log(`\t\t=> ${totalWithActualContentId.length} with content ID`);
+            }
 
             const missingPhotoId = a.matching.filter((m) => {
                 return (m.mediaItems.length === 0);
