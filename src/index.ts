@@ -10,7 +10,8 @@ import chalk from "chalk";
 import { program } from "commander";
 import { FfprobeOutput, ExifToolOutput, getExifToolDataForDirectory, getFfprobeData } from "./image_data";
 import { ImageMetadataJson, AlbumMetadataJson, parseAlbumMetadataJson, parseImageMetadataJson } from "./google_manifests";
-import { getAlbumFolders, getGooglePhotosDirsFromTakeoutDir } from "./google_takeout_dirs";
+import { getAlbumFolders, getGooglePhotosDirsFromTakeoutDir, getPartsForAlbum } from "./google_takeout_dirs";
+import { isVideo } from "./known_types";
 
 program
     .argument('<takeout_path_or_preparsed_file>', 'Google Takeout directories or parsed file')
@@ -146,39 +147,6 @@ function getContentInfoPath(c: ContentInfo, type: PathType = "any_but_image_firs
     throw new Error(`Could not find path for ${c} (type: ${type})`);
 }
 
-function getVideoTypes(): string[] {
-    const VIDEO_TYPES = [
-        ".MOV",
-        ".MP4", 
-        ".M4V",
-    ];
-    return VIDEO_TYPES;
-}
-function getImageTypes(): string[] {
-    const IMAGE_TYPES = [
-        ".GIF", 
-        ".HEIC",
-        ".JPG",
-        ".JPEG", 
-        ".PNG",
-        ".NEF"
-    ];
-    return IMAGE_TYPES;
-}
-function getKnownTypes(): string[] {
-    const KNOWN_TYPES = [
-        ... getVideoTypes(),
-        ... getImageTypes(),
-    ];
-    return KNOWN_TYPES;
-}
-function isKnownType(filename: string): boolean {
-    return getKnownTypes().includes(path.extname(filename).toUpperCase());
-}
-function isVideo(filename: string): boolean {
-    return getVideoTypes().includes(path.extname(filename).toUpperCase());
-}
-
 interface IAlbum {
     title: string;
     dirs: string[];
@@ -201,33 +169,6 @@ async function parseLibrary(takeout_dir: string, album_name: string | undefined,
     const albumFolders = getAlbumFolders(google_photos_dirs);
 
     const photosAlbums = getPhotosAlbums();
-
-    type PartsForDir = {
-        images_and_movies: string[],
-        albumMetadata: string | undefined,
-        manifests: string[],
-        remaining: string[]
-    };
-    const getPartsForAlbum = (album_dirs: string[]): PartsForDir => {
-        const items = album_dirs.map((d) => fs.readdirSync(d).map(f => path.join(d, f)) ).flat();
-        const images_and_movies = items.filter((i) => isKnownType(i));
-    
-        const jsons = items.filter((i) => {
-            return path.extname(i) === ".json";
-        });
-
-        const metadataJsonIndex = jsons.findIndex(i => path.basename(i) === "metadata.json");
-        const metadataJson = (metadataJsonIndex === -1) ? undefined : jsons.splice(metadataJsonIndex, 1)[0];
-        
-        const remaining = items.filter((i) => !images_and_movies.includes(i) && !jsons.includes(i) && (!metadataJson || i !== metadataJson));
-
-        return {
-            albumMetadata: metadataJson,
-            images_and_movies: images_and_movies,
-            manifests: jsons,
-            remaining: remaining
-        };
-    }
 
     const albumParts = albumFolders.map((a) => {
         const parts = getPartsForAlbum(a.dirs);

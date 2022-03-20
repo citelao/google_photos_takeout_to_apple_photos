@@ -5,7 +5,7 @@ import chalk from "chalk";
 import plist from "plist";
 import { program } from "commander";
 
-import { getAlbumFolders, getGooglePhotosDirsFromTakeoutDir } from "../src/google_takeout_dirs";
+import { getAlbumFolders, getGooglePhotosDirsFromTakeoutDir, getPartsForAlbum } from "../src/google_takeout_dirs";
 import { parseAlbumMetadataJson } from "../src/google_manifests";
 import Logger from "../src/Logger";
 import { addPhotosToAlbumIfMissing } from "../src/photos_app";
@@ -71,14 +71,24 @@ program
 
         // Get a list of albums.
         const googleTakeoutAlbums = getAlbumFolders(getGooglePhotosDirsFromTakeoutDir(takeout_dir));
-        const albums = googleTakeoutAlbums.map((albumFolder) => {
-            const items = albumFolder.dirs.flatMap((d) => fs.readdirSync(d).map(f => path.join(d, f)) );
-            const metadataJson = items.find(i => path.basename(i) === "metadata.json");
+        type Album = {
+            title: string;
+            dirs: string[];
+            images_and_movies: string[];
+            manifests: string[];
+            remaining: string[]
+        };
+        const albums = googleTakeoutAlbums.map((albumFolder): Album => {
+            const parts = getPartsForAlbum(albumFolder.dirs);
+            const metadataJson = parts.albumMetadata;
             const metadata = (metadataJson) ? parseAlbumMetadataJson(metadataJson) : null;
 
             return {
                 title: metadata?.title || albumFolder.name,
-                dirs: albumFolder.dirs
+                dirs: albumFolder.dirs,
+                images_and_movies: parts.images_and_movies,
+                manifests: parts.manifests,
+                remaining: parts.remaining,
             };
         });
 
@@ -204,12 +214,13 @@ program
             };
         });
 
-        const itemsByAlbums = matchedToAlbums.reduce<Array<{ title: string | null; matching: Matching[]; }>>((acc, m) => {
+        const itemsByAlbums = matchedToAlbums.reduce<Array<{ title: string | null; album: Album; matching: Matching[]; }>>((acc, m) => {
             const existingIndex = acc.findIndex((i) => m.album === i.title);
             if (existingIndex === -1) {
                 acc.push({
                     title: m.album,
-                    matching: [ m.matching ]
+                    album: albums.find((a) => a.title === m.album)!,
+                    matching: [ m.matching ],
                 });
             } else {
                 acc[existingIndex].matching.push(m.matching);
@@ -224,7 +235,7 @@ program
 
         Logger.log(`Albums found:`);
         itemsByAlbums.forEach((a) => {
-            Logger.log(`\t- ${a.title || chalk.grey("(null)")} ${chalk.gray(`(${a.matching.length} items)`)}`);
+            Logger.log(`\t- ${a.title || chalk.grey("(null)")} ${chalk.gray(`(${a.matching.length} matched items; ${a.album.images_and_movies.length} items)`)}`);
 
             const totalWithContentIdLookup = a.matching.filter((m) => {
                 return !!m.takeoutFiles.find((f) => contentIdsMap.has(f.path));
