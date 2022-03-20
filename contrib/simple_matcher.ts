@@ -9,6 +9,7 @@ import { getAlbumFolders, getGooglePhotosDirsFromTakeoutDir } from "../src/googl
 import { parseAlbumMetadataJson } from "../src/google_manifests";
 import Logger from "../src/Logger";
 import { addPhotosToAlbumIfMissing } from "../src/photos_app";
+import { getContentIdentifiersForDirectory } from "../src/image_data";
 
 interface IPhotoSweeperFile {
     path: string;
@@ -42,12 +43,16 @@ function isPhotoLibraryPhoto(file: IPhotoSweeperFile, loose = true): boolean {
 program
     .argument('<photosweeper_output>', 'plist/xml output from PhotoSweeper')
     .argument('<takeout_dir>', 'base takeout dir (that has all the subtakeouts)')
+    .argument('[content_identifiers_json]', 'JSON file with mapping of filenames to Live Photo content identifiers (will generate if not provided)')
     .option("-d --do_action", "actually do stuff")
     .option("-l --loose", "be loose with matching (don't require media item IDs)")
+    .option("--no_pair_live_photos", "skip pairing live photos")
     .option("-w --what_if", "what if?")
-    .action(async (photosweeper_output: string, takeout_dir: string) => {
+    .action(async (photosweeper_output: string, takeout_dir: string, content_identifiers_json: string | undefined) => {
         const do_action: boolean = program.opts().do_action;
         const loose: boolean = program.opts().loose;
+        const no_pair_live_photos: boolean = program.opts().no_pair_live_photos;
+        const pair_live_photos = !no_pair_live_photos;
         const what_if: boolean = program.opts().what_if;
 
         const content = fs.readFileSync(photosweeper_output);
@@ -76,6 +81,19 @@ program
                 dirs: albumFolder.dirs
             };
         });
+
+        // Pair live photos if asked.
+        if (pair_live_photos)
+        {
+            const allAlbumDirs = new Set(albums.flatMap((a) => a.dirs));
+            const ids = [];
+            Logger.log(chalk.gray(`Getting live photo information...`));
+            for (let dir of allAlbumDirs) {
+                Logger.log(chalk.gray(`\t- Enumerating ${dir}`));
+                ids.push(...(await getContentIdentifiersForDirectory(dir)));
+            }
+            return;
+        }
 
         // Build photos => albums match
         type Matching = {
