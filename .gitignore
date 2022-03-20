@@ -1,6 +1,8 @@
 .DS_Store
 
 node_modules/
+output/
+content_identifiers.json
 output.json
 final.json
 parsed.json
