@@ -86,10 +86,23 @@ program
         if (pair_live_photos)
         {
             const allAlbumDirs = new Set(albums.flatMap((a) => a.dirs));
-            const ids = [];
-            Logger.log(chalk.gray(`Getting live photo information...`));
+
+            // Be crafty---"Google Photos" dirs are probably the ones we want to iterate.
+            const albumDirsToIterate = new Set<string>();
             for (let dir of allAlbumDirs) {
-                Logger.log(chalk.gray(`\t- Enumerating ${dir}`));
+                const basedir = path.dirname(dir);
+                if (path.basename(basedir) === "Google Photos") {
+                    albumDirsToIterate.add(basedir);
+                } else {
+                    albumDirsToIterate.add(dir);
+                }
+            }
+
+            const ids = [];
+            Logger.log(chalk.gray(`Getting live photo information (pass content_identifiers_json in future runs to speed this up)...`));
+            let index = 1;
+            for (let dir of albumDirsToIterate) {
+                Logger.log(chalk.gray(`\t- (${chalk.white(`${index++} of ${albumDirsToIterate.size}`)}) Enumerating ${dir}`));
                 ids.push(...(await getContentIdentifiersForDirectory(dir)));
             }
             return;
