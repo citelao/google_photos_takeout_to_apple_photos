@@ -9,7 +9,7 @@ import { getAlbumFolders, getGooglePhotosDirsFromTakeoutDir } from "../src/googl
 import { parseAlbumMetadataJson } from "../src/google_manifests";
 import Logger from "../src/Logger";
 import { addPhotosToAlbumIfMissing } from "../src/photos_app";
-import { getContentIdentifiersForDirectory } from "../src/image_data";
+import { ContentIdentifiersOutput, getContentIdentifiersForDirectory } from "../src/image_data";
 
 interface IPhotoSweeperFile {
     path: string;
@@ -85,27 +85,38 @@ program
         // Pair live photos if asked.
         if (pair_live_photos)
         {
-            const allAlbumDirs = new Set(albums.flatMap((a) => a.dirs));
-
-            // Be crafty---"Google Photos" dirs are probably the ones we want to iterate.
-            const albumDirsToIterate = new Set<string>();
-            for (let dir of allAlbumDirs) {
-                const basedir = path.dirname(dir);
-                if (path.basename(basedir) === "Google Photos") {
-                    albumDirsToIterate.add(basedir);
-                } else {
-                    albumDirsToIterate.add(dir);
+            let ids: ContentIdentifiersOutput[] = [];
+            if (content_identifiers_json)
+            {
+                const library_data = fs.readFileSync(content_identifiers_json);
+                ids = JSON.parse(library_data.toString('utf-8')) as ContentIdentifiersOutput[];
+            } else {
+                const allAlbumDirs = new Set(albums.flatMap((a) => a.dirs));
+    
+                // Be crafty---"Google Photos" dirs are probably the ones we want to iterate.
+                const albumDirsToIterate = new Set<string>();
+                for (let dir of allAlbumDirs) {
+                    const basedir = path.dirname(dir);
+                    if (path.basename(basedir) === "Google Photos") {
+                        albumDirsToIterate.add(basedir);
+                    } else {
+                        albumDirsToIterate.add(dir);
+                    }
                 }
-            }
+    
+                Logger.log(chalk.gray(`Getting live photo information (pass content_identifiers_json in future runs to speed this up)...`));
+                let index = 1;
+                for (let dir of albumDirsToIterate) {
+                    Logger.log(chalk.gray(`\t- (${chalk.white(`${index++} of ${albumDirsToIterate.size}`)}) Enumerating ${dir}`));
+                    ids.push(...(await getContentIdentifiersForDirectory(dir)));
+                }
 
-            const ids = [];
-            Logger.log(chalk.gray(`Getting live photo information (pass content_identifiers_json in future runs to speed this up)...`));
-            let index = 1;
-            for (let dir of albumDirsToIterate) {
-                Logger.log(chalk.gray(`\t- (${chalk.white(`${index++} of ${albumDirsToIterate.size}`)}) Enumerating ${dir}`));
-                ids.push(...(await getContentIdentifiersForDirectory(dir)));
+                const output_file = "content_identifiers.json";
+                const file = Logger.getFileOrFallbackTemporaryFile(output_file);
+                fs.writeFileSync(file, JSON.stringify(ids, undefined, 4));
+                Logger.log(chalk.gray(`Output to ${chalk.green(file)}`));
+                return;
             }
-            return;
         }
 
         // Build photos => albums match

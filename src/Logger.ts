@@ -1,5 +1,8 @@
 import fs from "fs";
 import stripAnsi from "strip-ansi";
+import path from "path";
+import os from "os";
+import crypto from "crypto";
 
 export default class Logger {
     public static RUN_ID = new Date().toISOString();
@@ -56,5 +59,27 @@ export default class Logger {
             return i;
         });
         fs.appendFileSync(this.LOG_FILE, JSON.stringify(items, undefined, 4));
+    }
+
+    public static getTemporaryFolder(): string {
+        const renamedFilesDir = path.join(os.tmpdir(), "google_photos_to_apple_photos", Logger.RUN_ID);
+        fs.mkdirSync(renamedFilesDir, { recursive: true });
+
+        return renamedFilesDir;
+    }
+
+    public static getTemporaryFileName(): string {
+        const filename = crypto.randomUUID();
+        return path.join(this.getTemporaryFolder(), filename);
+    }
+
+    public static getFileOrFallbackTemporaryFile(desiredPath: string): string {
+        if (fs.existsSync(desiredPath)) {
+            const newFile = this.getTemporaryFileName();
+            Logger.warn(`Output file '${desiredPath}' exists, using ${newFile} instead`);
+            return newFile;
+        }
+
+        return desiredPath;
     }
 }

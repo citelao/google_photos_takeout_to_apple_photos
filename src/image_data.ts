@@ -36,7 +36,11 @@ export async function getExifToolDataForDirectory(dirPath: string): Promise<[Exi
     return json;
 }
 
-export async function getContentIdentifiersForDirectory(dirPath: string): Promise<Array<{ SourceFile: string; ContentIdentifier?: string; }>> {
+export interface ContentIdentifiersOutput {
+    SourceFile: string;
+    ContentIdentifier: string | undefined;
+}
+export async function getContentIdentifiersForDirectory(dirPath: string): Promise<Array<ContentIdentifiersOutput>> {
     const PRECISION = 6;
     const result = await execAsync(`exiftool -d "%s" -c "%+.${PRECISION}f" "${dirPath}" -ContentIdentifier -json -r`);
     const json = JSON.parse(result.stdout);
