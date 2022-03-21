@@ -10,6 +10,7 @@ import { parseAlbumMetadataJson } from "../src/google_manifests";
 import Logger from "../src/Logger";
 import { addPhotosToAlbumIfMissing } from "../src/photos_app";
 import { ContentIdentifiersOutput, getContentIdentifiersForDirectory } from "../src/image_data";
+import { isVideo } from "../src/known_types";
 
 interface IPhotoSweeperFile {
     path: string;
@@ -93,7 +94,8 @@ program
         });
 
         // Pair live photos if asked.
-        let contentIdsMap = new Map<string, string | null>();
+        let sourceFileToContentIdsMap = new Map<string, string | null>();
+        let contentIdToSourceImageMap = new Map<string, string>();
         if (pair_live_photos)
         {
             let ids: ContentIdentifiersOutput[] = [];
@@ -129,10 +131,20 @@ program
             }
 
             ids.forEach((i) => {
-                if (contentIdsMap.has(i.SourceFile)) {
-                    throw new Error(`Already have ID ${contentIdsMap.get(i.SourceFile)} for ${i.SourceFile} (want to set to ${i.ContentIdentifier})`);
+                if (sourceFileToContentIdsMap.has(i.SourceFile)) {
+                    throw new Error(`Already have ID ${sourceFileToContentIdsMap.get(i.SourceFile)} for ${i.SourceFile} (want to set to ${i.ContentIdentifier})`);
                 }
-                contentIdsMap.set(i.SourceFile, i.ContentIdentifier || null);
+                sourceFileToContentIdsMap.set(i.SourceFile, i.ContentIdentifier || null);
+
+                if (i.ContentIdentifier) {
+                    if (!isVideo(i.SourceFile)) {
+                        if (contentIdToSourceImageMap.has(i.ContentIdentifier)) {
+                            Logger.warn(chalk.grey(`Already have ID ${contentIdToSourceImageMap.get(i.ContentIdentifier)} for ${i.ContentIdentifier} ${chalk.grey(`(want to set to ${i.SourceFile})`)}`));
+                        }
+
+                        contentIdToSourceImageMap.set(i.ContentIdentifier, i.SourceFile);
+                    }
+                }
             });
         }
 
@@ -235,19 +247,58 @@ program
 
         Logger.log(`Albums found:`);
         itemsByAlbums.forEach((a) => {
-            Logger.log(`\t- ${a.title || chalk.grey("(null)")} ${chalk.gray(`(${a.matching.length} matched items; ${a.album.images_and_movies.length} items)`)}`);
+            let albumImagesAndVideosWithLivePhotosCleaned = [];
+            if (pair_live_photos) {
+                for (let p of a.album.images_and_movies) {
+                    if (isVideo(p)) {
+                        // Only try to match videos to images, since we expect
+                        // images might be edited (but who's editing a video?)
+                        const contentId = sourceFileToContentIdsMap.get(p)
+                        if (contentId) {
+                            const matchedSourceFile = contentIdToSourceImageMap.get(contentId);
+                            if (matchedSourceFile) {
+                                // TODO: store
+                                continue;
+                            }
+                        }
+                    }
+
+                    albumImagesAndVideosWithLivePhotosCleaned.push(p);
+                }
+            } else {
+                albumImagesAndVideosWithLivePhotosCleaned = a.album.images_and_movies;
+            }
+
+            const allImported = a.matching.length === albumImagesAndVideosWithLivePhotosCleaned.length;
+            if (allImported) {
+                Logger.log(`\t- ${chalk.green(a.title) || chalk.grey("(null)")} ${chalk.gray(`(all ${a.matching.length} items in Photos)`)}`);
+            } else {
+                Logger.log(`\t- ${a.title || chalk.grey("(null)")} ${chalk.gray(`(${chalk.white(a.matching.length)}/${albumImagesAndVideosWithLivePhotosCleaned.length} items in Photos)`)}`);
+            }
+            
+            if (a.album.remaining.length > 0) {
+                Logger.log(`\t\t=> ${chalk.yellow(a.album.remaining.length)} extra files`);
+            }
 
             const totalWithContentIdLookup = a.matching.filter((m) => {
-                return !!m.takeoutFiles.find((f) => contentIdsMap.has(f.path));
-            });
-            const totalWithActualContentId = a.matching.filter((m) => {
-                return !!m.takeoutFiles.find((f) => contentIdsMap.has(f.path) && contentIdsMap.get(f.path) !== null);
+                return !!m.takeoutFiles.find((f) => sourceFileToContentIdsMap.has(f.path));
             });
             if (totalWithContentIdLookup.length !== a.matching.length) {
                 Logger.log(chalk.yellow(`\t\t=> Only know content ID status for ${totalWithContentIdLookup.length}.`));
             }
-            if (totalWithActualContentId.length > 0) {
-                Logger.log(`\t\t=> ${totalWithActualContentId.length} with content ID`);
+
+            if (pair_live_photos) {
+                if (albumImagesAndVideosWithLivePhotosCleaned.length !== a.album.images_and_movies.length) {
+                    Logger.log(chalk.grey(`\t\t=> ${albumImagesAndVideosWithLivePhotosCleaned.length} live photos found from ${a.album.images_and_movies.length} base files`));
+                }
+
+                // TODO: match to figure out dupes
+                // const totalWithActualContentId = a.matching.filter((m) => {
+                //     return !!m.takeoutFiles.find((f) => sourceFileToContentIdsMap.has(f.path) && sourceFileToContentIdsMap.get(f.path) !== null);
+                // });
+                // if (totalWithActualContentId.length > 0) {
+                //     Logger.log(`\t\t=> ${totalWithActualContentId.length} with content ID`);
+                // }    
             }
 
             const missingPhotoId = a.matching.filter((m) => {
