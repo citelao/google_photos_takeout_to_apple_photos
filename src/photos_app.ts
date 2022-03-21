@@ -294,9 +294,31 @@ export function chunked<T, O>(array: T[], chunk_size: number, fn: (input: T[], i
     return chunk(array, chunk_size).flatMap(fn);
 }
 
+function restartPhotos(what_if: boolean) {
+    const script = `
+    tell application "Photos"
+        quit
+        activate
+    end tell
+    `;
+    if (what_if) {
+        Logger.log(script);
+        return [];
+    } else {
+        child_process.spawnSync("osascript", ["-"], { input: script });
+    }
+}
+
 export function importPhotosToAlbumChunked(album_name: string, UNSAFE_files_ESCAPE_THESE: string[], what_if: boolean) {
     const CHUNK_SIZE = 200;
+    const RESTART_EVERY = 2000;
+    let lastRestart = 0;
     return chunked(UNSAFE_files_ESCAPE_THESE, CHUNK_SIZE, (files, i, a) => {
+        if ((i * CHUNK_SIZE) - lastRestart > RESTART_EVERY) {
+            lastRestart = i * CHUNK_SIZE;
+            Logger.log(chalk.gray(`\t\tRestarting photos...`));
+            restartPhotos(what_if);
+        }
         Logger.log(chalk.gray(`\t\tImporting chunk ${i}/${a.length}`));
         return importPhotosToAlbum(album_name, files, what_if);
     });

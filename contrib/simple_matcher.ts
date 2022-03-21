@@ -8,7 +8,7 @@ import { program } from "commander";
 import { getAlbumFolders, getGooglePhotosDirsFromTakeoutDir, getPartsForAlbum } from "../src/google_takeout_dirs";
 import { parseAlbumMetadataJson } from "../src/google_manifests";
 import Logger from "../src/Logger";
-import { addPhotosToAlbumIfMissing } from "../src/photos_app";
+import { addPhotosToAlbumIfMissing, importPhotosToAlbum, importPhotosToAlbumChunked } from "../src/photos_app";
 import { ContentIdentifiersOutput, getContentIdentifiersForDirectory } from "../src/image_data";
 import { isVideo } from "../src/known_types";
 
@@ -45,13 +45,13 @@ program
     .argument('<photosweeper_output>', 'plist/xml output from PhotoSweeper')
     .argument('<takeout_dir>', 'base takeout dir (that has all the subtakeouts)')
     .argument('[content_identifiers_json]', 'JSON file with mapping of filenames to Live Photo content identifiers (will generate if not provided)')
-    .option("-d --do_action", "actually do stuff")
+    .option("-c --create_albums", "actually do stuff")
     .option("-m --missing", "dump missing (non-imported) images")
     .option("-l --loose", "be loose with matching (don't require media item IDs)")
     .option("--no_pair_live_photos", "skip pairing live photos")
     .option("-w --what_if", "what if?")
     .action(async (photosweeper_output: string, takeout_dir: string, content_identifiers_json: string | undefined) => {
-        const do_action: boolean = program.opts().do_action;
+        const create_albums: boolean = program.opts().create_albums;
         const missing: boolean = program.opts().missing;
         const loose: boolean = program.opts().loose;
         const no_pair_live_photos: boolean = program.opts().no_pair_live_photos;
@@ -359,54 +359,70 @@ program
             return a.unimportedFiles;
         });
         const remaining = itemsByAlbumsWithMissing.flatMap((a) => a.remainingFiles);
-        
-        if (missing) {
-            Logger.log(`Unimported images:`);
+        unimported.sort((a, b) => {
+            return a.localeCompare(b); 
+        });
 
-            unimported.sort((a, b) => {
-                return a.localeCompare(b); 
-            });
-
-            remaining.sort((a, b) => {
-                return a.localeCompare(b); 
-            });
-
-            Logger.log(unimported);
-            Logger.log(remaining);
-        }
+        remaining.sort((a, b) => {
+            return a.localeCompare(b); 
+        });
 
         Logger.log(`Some stats:`);
         if (unimported.length > 0) {
-            Logger.log(`\t Unimported images: ${chalk.yellow(unimported.length)}`);
+            Logger.log(`\t Unimported images: ${chalk.yellow(unimported.length)} ${chalk.grey("(full list in logs)")}`);
+            Logger.verbose(unimported);
+        }
+        if (remaining.length > 0) {
             Logger.log(`\t Unknown files: ${chalk.yellow(remaining.length)}`);
+            Logger.log(remaining);
         }
 
         if (!missing) {
-            Logger.log(`Use -m to --missing to dump missing images`);
-        } 
+            Logger.log(`Use -m to --missing to import missing images.`);
+        }  else {
+            Logger.log(`Importing missing items to album:`);
+            itemsByAlbumsWithMissing.forEach((a) => {
+                if (!a.title) {
+                    Logger.log(`\t- Skipping album with no name`);
+                    return;
+                }
 
-        if (!do_action) {
-            Logger.log(`Use -d or --do_action to actually add the items to albums.`);
-            return;
+                if (a.unimportedFiles.length === 0) {
+                    Logger.log(chalk.grey(`\t- Skipping ${a.title} - all imported already.`));
+                    return;
+                }
+
+                const results = importPhotosToAlbumChunked(a.title, a.unimportedFiles, what_if);
+                const expectedAdded = a.unimportedFiles.length;
+                if (results.length != expectedAdded) {
+                    Logger.log(`\t- Added ${results.length} items to ${a.title} (${chalk.yellow(`expected ${expectedAdded}`)})`);
+                } else {
+                    Logger.log(`\t- Added ${results.length} items to ${a.title}`);
+                }
+            })
         }
 
-        // DO THE WORK!
-        Logger.log(`Adding items to album:`);
-        itemsByAlbumsWithMissing.forEach((a) => {
-            if (!a.title) {
-                Logger.log(`\t- Skipping album with no name`);
-                return;
-            }
-            const ids = a.importedFiles.flatMap((i) => i.matching.mediaItems.map((i) => i.id)).filter((i) => !!i) as string[];
-            const added = addPhotosToAlbumIfMissing(a.title, ids, what_if);
+        if (!create_albums) {
+            Logger.log(`Use -c or --create_albums to add existing items to albums.`);
+        } else {
+            Logger.log(`Adding items to album:`);
+            itemsByAlbumsWithMissing.forEach((a) => {
+                if (!a.title) {
+                    Logger.log(`\t- Skipping album with no name`);
+                    return;
+                }
+                const ids = a.importedFiles.flatMap((i) => i.matching.mediaItems.map((i) => i.id)).filter((i) => !!i) as string[];
+                const added = addPhotosToAlbumIfMissing(a.title, ids, what_if);
+    
+                const expectedAdded = ids.length;
+                if (added != expectedAdded) {
+                    Logger.log(`\t- Added ${added} items to ${a.title} (${chalk.yellow(`expected ${expectedAdded}`)})`);
+                } else {
+                    Logger.log(`\t- Added ${added} items to ${a.title}`);
+                }
+            });
+        }
 
-            const expectedAdded = ids.length;
-            if (added != expectedAdded) {
-                Logger.log(`\t- Added ${added} items to ${a.title} (${chalk.yellow(`expected ${expectedAdded}`)})`);
-            } else {
-                Logger.log(`\t- Added ${added} items to ${a.title}`);
-            }
-        });
     });
 
 program.parse();

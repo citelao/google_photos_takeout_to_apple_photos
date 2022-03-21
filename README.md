@@ -136,9 +136,9 @@ Prerequisites: PhotoSweeper X, a download of your Google Takeout photos, a Photo
 
 2. `File > Export to XML > List of Photos...`
 
-3. Run `npm run simple -- path/to/the/export.plist path/to/takeout/dir`
+3. Run `npm run simple -- path/to/the/export.plist path/to/takeout/dir` with `-c` to create the initial albums
 
-4. TODO: import remaining non-imported photos
+4. Run `npm run simple -- path/to/the/export.plist path/to/takeout/dir` with `-m` to brute-force try to import all remaining missing images. *Always* choose don't import duplicates and apply to all (space, click, space, click, space, click).
 
 5. Download all your [shared albums](https://photos.google.com/sharing), since files you haven't saved to your library are not included in your Takeout.
 
@@ -157,7 +157,7 @@ Prerequisites: PhotoSweeper X, a download of your Google Takeout photos, a Photo
 ### TODO
 
 * [X] Remove all existing dupes in Photos library, to simplify output
-* [ ] Actually match dupes/not-dupes files
-* [ ] Generate a list of non-imported files
-* [ ] Import non-imported files (manually)
+* [X] Actually match dupes/not-dupes files
+* [X] Generate a list of non-imported files
+* [X] Import non-imported files
 * [ ] Import shared albums
