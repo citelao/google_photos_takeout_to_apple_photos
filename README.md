@@ -157,7 +157,7 @@ Prerequisites: PhotoSweeper X, a download of your Google Takeout photos, a Photo
         You only need to download the albums that are missing photos, since those are the albums that will be missing photos if you use Google Takeout.
 
 
-5. TODO: import shared albums. Manually?
+5. Open the shared albums and, uh, drag 'em into Photos, into the albums you want. Don't import duplicates.
 
 ### TODO
 
