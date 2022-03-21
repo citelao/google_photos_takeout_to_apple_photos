@@ -110,7 +110,7 @@ I ended up running PhotoSweeper X after all of this to remove duplicates and tha
 
 In the end, I recommend a different approach to imports:
 
-1. Backup *everything. Keep all the Google Takeout ZIPs and your original Apple Photos library. Set Apple Photos "Download Originals to this Mac" (which I'm leaving on permanently---it's so nice to have everything local again and I never want to give that up). Keep them on external drives and The Cloud somewhere.
+1. Backup *everything*. Keep all the Google Takeout ZIPs and your original Apple Photos library. Set Apple Photos "Download Originals to this Mac" (which I'm leaving on permanently---it's so nice to have everything local again and I never want to give that up). Keep them on external drives and The Cloud somewhere.
 
 2. Recreate albums. Honestly, maybe do it by hand. One option is simply run PhotoSweeper X *by album* in Takeout---mark all the dupes and then instead of deleting them in Apple Photos, drag them into a new album. You might also be able to script it somehow, but I'm not sure I'm ready for that commitment.
 
@@ -136,6 +136,28 @@ Prerequisites: PhotoSweeper X, a download of your Google Takeout photos, a Photo
 
 2. `File > Export to XML > List of Photos...`
 
-3. Run `npm run simple -- path/to/the/export.plist`
+3. Run `npm run simple -- path/to/the/export.plist path/to/takeout/dir`
 
-4. TODO: import remaining
+4. TODO: import remaining non-imported photos
+
+5. Download all your [shared albums](https://photos.google.com/sharing), since files you haven't saved to your library are not included in your Takeout.
+
+    1. Open each album, and download the album if not all the photos are in your library. You can see this easily by looking to the top right of the album---if you are missing photos, there will be an "Add to library" cloud icon:
+
+        ![Add to library button visible](/doc/google_photos_with_missing_photos.png)
+    
+        Otherwise, there will be no cloud icon:
+
+        ![Add to library button visible](/doc/google_photos_without_missing_photos.png)
+
+        You only need to download the albums that are missing photos, since those are the albums that will be missing photos if you use Google Takeout.
+
+5. TODO: import shared albums. Manually?
+
+### TODO
+
+* [X] Remove all existing dupes in Photos library, to simplify output
+* [ ] Actually match dupes/not-dupes files
+* [ ] Generate a list of non-imported files
+* [ ] Import non-imported files (manually)
+* [ ] Import shared albums
