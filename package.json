@@ -8,7 +8,8 @@
     "go": "ts-node src/index.ts",
     "inspect": "ts-node contrib/inspector.ts",
     "search": "ts-node contrib/searcher.ts",
-    "simple": "ts-node contrib/simple_matcher.ts"
+    "simple": "ts-node contrib/simple_matcher.ts",
+    "random": "ts-node contrib/random_file.ts"
   },
   "devDependencies": {
     "@types/xml2js": "^0.4.9",

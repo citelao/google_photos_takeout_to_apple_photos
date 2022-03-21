@@ -140,6 +140,10 @@ Prerequisites: PhotoSweeper X, a download of your Google Takeout photos, a Photo
 
 4. Run `npm run simple -- path/to/the/export.plist path/to/takeout/dir` with `-m` to brute-force try to import all remaining missing images. *Always* choose don't import duplicates and apply to all (space, click, space, click, space, click).
 
+5. Validate you've imported most of the photos (`npm run random -- ~/Downloads/takeout 20`, then check for those photos in Apple Photos). If you check 20 files, you have a 95% CI of 83%-100% import. 30: (88%-100%). https://epitools.ausvet.com.au/ciproportion
+
+5. Delete all the Google Takeout stuff, since you've imported it (you have a backup, right?).
+
 5. Download all your [shared albums](https://photos.google.com/sharing), since files you haven't saved to your library are not included in your Takeout.
 
     1. Open each album, and download the album if not all the photos are in your library. You can see this easily by looking to the top right of the album---if you are missing photos, there will be an "Add to library" cloud icon:
@@ -151,6 +155,7 @@ Prerequisites: PhotoSweeper X, a download of your Google Takeout photos, a Photo
         ![Add to library button visible](/doc/google_photos_without_missing_photos.png)
 
         You only need to download the albums that are missing photos, since those are the albums that will be missing photos if you use Google Takeout.
+
 
 5. TODO: import shared albums. Manually?
 
