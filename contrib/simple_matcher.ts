@@ -93,9 +93,21 @@ program
             };
         });
 
+        const getAlbumTitle = (file_path: string): string | null => {
+            const matchedAlbum = albums.find((a) => a.dirs.findIndex((d) => d.startsWith(path.dirname(file_path))) !== -1);
+            if (!matchedAlbum) {
+                Logger.warn(chalk.yellow(`No matched album for ${file_path}`));
+                return null;
+            }
+            return matchedAlbum.title;
+        }
+        const isGoodTitle = (title: string): boolean => {
+            return !title.startsWith("Photos from ");
+        }
+
         // Pair live photos if asked.
         let sourceFileToContentIdsMap = new Map<string, string | null>();
-        let contentIdToSourceImageMap = new Map<string, string>();
+        let contentIdToSourceImageMap = new Map<string, string[]>();
         if (pair_live_photos)
         {
             let ids: ContentIdentifiersOutput[] = [];
@@ -138,11 +150,8 @@ program
 
                 if (i.ContentIdentifier) {
                     if (!isVideo(i.SourceFile)) {
-                        if (contentIdToSourceImageMap.has(i.ContentIdentifier)) {
-                            Logger.warn(chalk.grey(`Already have ID ${contentIdToSourceImageMap.get(i.ContentIdentifier)} for ${i.ContentIdentifier} ${chalk.grey(`(want to set to ${i.SourceFile})`)}`));
-                        }
-
-                        contentIdToSourceImageMap.set(i.ContentIdentifier, i.SourceFile);
+                        const existingFiles = contentIdToSourceImageMap.get(i.ContentIdentifier) || [];
+                        contentIdToSourceImageMap.set(i.ContentIdentifier, [...existingFiles, i.SourceFile]);
                     }
                 }
             });
@@ -180,14 +189,6 @@ program
         });
         // console.dir(matchings);
 
-        const getAlbumTitle = (file_path: string): string | null => {
-            const matchedAlbum = albums.find((a) => a.dirs.findIndex((d) => d.startsWith(path.dirname(file_path))) !== -1);
-            if (!matchedAlbum) {
-                Logger.warn(chalk.yellow(`No matched album for ${file_path}`));
-                return null;
-            }
-            return matchedAlbum.title;
-        }
         const matchedToAlbums = matchings.map((m) => {
             // if (m.mediaItems.length > 1) {
             //     throw new Error(`${m.groupName} - Too many media items for item ${m.mediaItems[0].path} (apple photos: ${m.mediaItems.length}; takeout files: ${m.takeoutFiles.length})`);
@@ -208,7 +209,7 @@ program
                 
                 default:
                     {
-                        const firstGoodTitle = potentialAlbumTitles.find((t) => !t.startsWith("Photos from "));
+                        const firstGoodTitle = potentialAlbumTitles.find(isGoodTitle);
                         if (firstGoodTitle)
                         {
                             albumTitle = firstGoodTitle;
@@ -245,9 +246,18 @@ program
             return (a.title || "").localeCompare(b.title || ""); 
         });
 
-        Logger.log(`Albums found:`);
-        itemsByAlbums.forEach((a) => {
+        type AlbumDuped = {
+            title: string | null;
+
+            importedFiles: Array<{ matching: Matching; pairedLivePhoto?: { files: string[]; contentId: string; } }>;
+            unimportedFiles: string[];
+            remainingFiles: string[];
+        };
+        const itemsByAlbumsWithMissing = itemsByAlbums.map((a): AlbumDuped => {
+            // Logger.log(a.album.images_and_movies);
+
             let albumImagesAndVideosWithLivePhotosCleaned = [];
+            let baseFileToLivePhotosMap = new Map<string, { files: string[]; contentId: string; }>();
             if (pair_live_photos) {
                 for (let p of a.album.images_and_movies) {
                     if (isVideo(p)) {
@@ -257,7 +267,11 @@ program
                         if (contentId) {
                             const matchedSourceFile = contentIdToSourceImageMap.get(contentId);
                             if (matchedSourceFile) {
-                                // TODO: store
+                                matchedSourceFile.forEach((matched) => {
+                                    const base = baseFileToLivePhotosMap.get(matched) || { files: [], contentId: contentId};
+                                    base.files.push(p);
+                                    baseFileToLivePhotosMap.set(matched, base);
+                                });
                                 continue;
                             }
                         }
@@ -269,27 +283,72 @@ program
                 albumImagesAndVideosWithLivePhotosCleaned = a.album.images_and_movies;
             }
 
-            const allImported = a.matching.length === albumImagesAndVideosWithLivePhotosCleaned.length;
+            // Logger.log(albumImagesAndVideosWithLivePhotosCleaned);
+
+            const matchingsInProgress = [...a.matching];
+            const files = albumImagesAndVideosWithLivePhotosCleaned.map((i) => {
+                const matchIndex = matchingsInProgress.findIndex((m) => m.takeoutFiles.findIndex((f) => f.path === i) !== -1);
+                const match = matchingsInProgress.splice(matchIndex, 1)[0];
+                const pairedLivePhoto = baseFileToLivePhotosMap.get(i);
+                
+                return {
+                    file: i,
+                    match: match,
+                    pairedLivePhoto: pairedLivePhoto
+                };
+            });
+            if (matchingsInProgress.length !== 0) {
+                Logger.warn(`Remaining matchings: ${JSON.stringify(matchingsInProgress, undefined, 4)}`);
+            }
+            const importedFiles = files.filter((f) => f.match).map((f) => {
+                return {
+                    matching: f.match!,
+                    pairedLivePhoto: f.pairedLivePhoto
+                };
+            });
+            const unimportedFiles = files.filter((f) => !f.match).map((f) => f.file);
+            // Logger.log(importedFiles);
+            // Logger.log(unimportedFiles);
+
+            return {
+                title: a.title,
+                importedFiles: importedFiles,
+                unimportedFiles: unimportedFiles,
+                remainingFiles: a.album.remaining,
+            }
+        });
+
+        Logger.log(`Albums found:`);
+        itemsByAlbumsWithMissing.forEach((a) => {
+            const allImages = [...a.importedFiles.flatMap((i) => i.matching.takeoutFiles[0].path), ...a.unimportedFiles];
+            const allFiles = [...allImages, ...a.remainingFiles];
+
+            const allImported = a.unimportedFiles.length === 0;
             if (allImported) {
-                Logger.log(`\t- ${chalk.green(a.title) || chalk.grey("(null)")} ${chalk.gray(`(all ${a.matching.length} items in Photos)`)}`);
+                Logger.log(`\t- ${chalk.green(a.title) || chalk.grey("(null)")} ${chalk.gray(`(all ${a.importedFiles.length} items in Photos)`)}`);
             } else {
-                Logger.log(`\t- ${a.title || chalk.grey("(null)")} ${chalk.gray(`(${chalk.white(a.matching.length)}/${albumImagesAndVideosWithLivePhotosCleaned.length} items in Photos)`)}`);
+                Logger.log(`\t- ${a.title || chalk.grey("(null)")} ${chalk.gray(`(${chalk.white(a.importedFiles.length)}/${allImages.length} items in Photos)`)}`);
+                // Logger.log(`\t\t${a.unimportedFiles.slice(0, 5)}`)
             }
             
-            if (a.album.remaining.length > 0) {
-                Logger.log(`\t\t=> ${chalk.yellow(a.album.remaining.length)} extra files`);
+            if (a.remainingFiles.length > 0) {
+                Logger.log(`\t\t=> + ${chalk.yellow(a.remainingFiles.length)} extra files`);
             }
 
-            const totalWithContentIdLookup = a.matching.filter((m) => {
-                return !!m.takeoutFiles.find((f) => sourceFileToContentIdsMap.has(f.path));
+            const totalWithContentIdLookup = allImages.filter((f) => {
+                return sourceFileToContentIdsMap.has(f);
             });
-            if (totalWithContentIdLookup.length !== a.matching.length) {
+            if (totalWithContentIdLookup.length !== allImages.length) {
                 Logger.log(chalk.yellow(`\t\t=> Only know content ID status for ${totalWithContentIdLookup.length}.`));
             }
 
             if (pair_live_photos) {
-                if (albumImagesAndVideosWithLivePhotosCleaned.length !== a.album.images_and_movies.length) {
-                    Logger.log(chalk.grey(`\t\t=> ${albumImagesAndVideosWithLivePhotosCleaned.length} live photos found from ${a.album.images_and_movies.length} base files`));
+                const livePhotos = a.importedFiles.filter((i) => i.pairedLivePhoto);
+                const baseFileCount = a.importedFiles.reduce((acc, i) => {
+                    return acc + i.matching.takeoutFiles.length + (i.pairedLivePhoto?.files.length || 0);
+                }, 0);
+                if (livePhotos.length !== 0) {
+                    Logger.log(chalk.grey(`\t\t=> ${livePhotos.length} live photos found from ${baseFileCount} base files`));
                 }
 
                 // TODO: match to figure out dupes
@@ -301,8 +360,8 @@ program
                 // }    
             }
 
-            const missingPhotoId = a.matching.filter((m) => {
-                return (m.mediaItems.length === 0);
+            const missingPhotoId = a.importedFiles.filter((i) => {
+                return (i.matching.mediaItems.length === 0);
             });
             if (missingPhotoId.length > 0) {
                 Logger.log(`\t\t=> ${missingPhotoId.length} missing photo ID`);
@@ -316,15 +375,20 @@ program
 
         // DO THE WORK!
         Logger.log(`Adding items to album:`);
-        itemsByAlbums.forEach((a) => {
+        itemsByAlbumsWithMissing.forEach((a) => {
             if (!a.title) {
                 Logger.log(`\t- Skipping album with no name`);
                 return;
             }
-            const ids = a.matching.flatMap((m) => m.mediaItems.map((i) => i.id)).filter((i) => !!i) as string[];
+            const ids = a.importedFiles.flatMap((i) => i.matching.mediaItems.map((i) => i.id)).filter((i) => !!i) as string[];
             const added = addPhotosToAlbumIfMissing(a.title, ids, what_if);
 
-            Logger.log(`\t- Added ${added} items to ${a.title}`);
+            const expectedAdded = ids.length;
+            if (added != expectedAdded) {
+                Logger.log(`\t- Added ${added} items to ${a.title} (${chalk.yellow(`expected ${expectedAdded}`)})`);
+            } else {
+                Logger.log(`\t- Added ${added} items to ${a.title}`);
+            }
         });
     });
 
