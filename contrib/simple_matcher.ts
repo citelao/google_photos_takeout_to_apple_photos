@@ -46,11 +46,13 @@ program
     .argument('<takeout_dir>', 'base takeout dir (that has all the subtakeouts)')
     .argument('[content_identifiers_json]', 'JSON file with mapping of filenames to Live Photo content identifiers (will generate if not provided)')
     .option("-d --do_action", "actually do stuff")
+    .option("-m --missing", "dump missing (non-imported) images")
     .option("-l --loose", "be loose with matching (don't require media item IDs)")
     .option("--no_pair_live_photos", "skip pairing live photos")
     .option("-w --what_if", "what if?")
     .action(async (photosweeper_output: string, takeout_dir: string, content_identifiers_json: string | undefined) => {
         const do_action: boolean = program.opts().do_action;
+        const missing: boolean = program.opts().missing;
         const loose: boolean = program.opts().loose;
         const no_pair_live_photos: boolean = program.opts().no_pair_live_photos;
         const pair_live_photos = !no_pair_live_photos;
@@ -189,42 +191,21 @@ program
         });
         // console.dir(matchings);
 
-        const matchedToAlbums = matchings.map((m) => {
+        const matchedToAlbums = matchings.flatMap((m) => {
             // if (m.mediaItems.length > 1) {
             //     throw new Error(`${m.groupName} - Too many media items for item ${m.mediaItems[0].path} (apple photos: ${m.mediaItems.length}; takeout files: ${m.takeoutFiles.length})`);
             // }
 
-            const potentialAlbumTitles = m.takeoutFiles
+            const albumTitles = m.takeoutFiles
                 .map((f) => getAlbumTitle(f.path))
                 .filter((f) => !!f) as string[];
-            let albumTitle: string | null = null;
-            switch(potentialAlbumTitles.length) {
-                case 0:
-                    // throw new Error(`No album title for ${m.groupName}`);
-                    break;
-
-                case 1:
-                    albumTitle = potentialAlbumTitles[0];
-                    break;
-                
-                default:
-                    {
-                        const firstGoodTitle = potentialAlbumTitles.find(isGoodTitle);
-                        if (firstGoodTitle)
-                        {
-                            albumTitle = firstGoodTitle;
-                        } else {
-                            Logger.warn(chalk.yellow(`Multiple good albums found for ${m.groupName} (${potentialAlbumTitles}). Choosing the first.`))
-                            albumTitle = potentialAlbumTitles[0];
-                        }
-                        break;
-                    }
-            }
-
-            return {
-                album: albumTitle,
-                matching: m,
-            };
+            
+            return albumTitles.map((t) => {
+                return {
+                    album: t,
+                    matching: m,
+                };
+            });
         });
 
         const itemsByAlbums = matchedToAlbums.reduce<Array<{ title: string | null; album: Album; matching: Matching[]; }>>((acc, m) => {
@@ -287,8 +268,12 @@ program
 
             const matchingsInProgress = [...a.matching];
             const files = albumImagesAndVideosWithLivePhotosCleaned.map((i) => {
-                const matchIndex = matchingsInProgress.findIndex((m) => m.takeoutFiles.findIndex((f) => f.path === i) !== -1);
-                const match = matchingsInProgress.splice(matchIndex, 1)[0];
+                const matchIndex = a.matching.findIndex((m) => m.takeoutFiles.findIndex((f) => f.path === i) !== -1);
+                const matchInProgressIndex = matchingsInProgress.findIndex((m) => m.takeoutFiles.findIndex((f) => f.path === i) !== -1);
+                if (matchInProgressIndex !== -1) {
+                    matchingsInProgress.splice(matchInProgressIndex, 1);
+                }
+                const match = a.matching[matchIndex];
                 const pairedLivePhoto = baseFileToLivePhotosMap.get(i);
                 
                 return {
@@ -368,8 +353,40 @@ program
             }
         });
 
+
+        // MISSING
+        const unimported = itemsByAlbumsWithMissing.flatMap((a) => {
+            return a.unimportedFiles;
+        });
+        const remaining = itemsByAlbumsWithMissing.flatMap((a) => a.remainingFiles);
+        
+        if (missing) {
+            Logger.log(`Unimported images:`);
+
+            unimported.sort((a, b) => {
+                return a.localeCompare(b); 
+            });
+
+            remaining.sort((a, b) => {
+                return a.localeCompare(b); 
+            });
+
+            Logger.log(unimported);
+            Logger.log(remaining);
+        }
+
+        Logger.log(`Some stats:`);
+        if (unimported.length > 0) {
+            Logger.log(`\t Unimported images: ${chalk.yellow(unimported.length)}`);
+            Logger.log(`\t Unknown files: ${chalk.yellow(remaining.length)}`);
+        }
+
+        if (!missing) {
+            Logger.log(`Use -m to --missing to dump missing images`);
+        } 
+
         if (!do_action) {
-            Logger.log(`Use -d to actually add the items to albums.`);
+            Logger.log(`Use -d or --do_action to actually add the items to albums.`);
             return;
         }
 
